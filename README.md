@@ -6,7 +6,7 @@ Web based Meshtastic messaging, mapping &amp; debugging application
 
 This project runs on a Raspberry Pi (or any Linux host) and connects to a Meshtastic node over WiFi (TCP) using the Meshtastic Python library. It stores messages and node information in SQLite, and provides a lightweight Flask web UI for viewing and sending messages, monitoring active nodes, viewing positions on a map, and inspecting raw packets.
 
-What it does
+## What it does
 ## Gateway (WiFi/TCP)
 
 Connects to a Meshtastic device via TCP (WiFi).
@@ -57,28 +57,42 @@ Python 3.9+ recommended (you’re using 3.11, which is fine)
 
 A Meshtastic device with WiFi enabled and reachable on your LAN
 
+## Meshtastic device setup (WiFi)
+
+#### On the Meshtastic device:
+
+* Enable WiFi and connect it to your LAN (DHCP is fine).
+* Confirm you can reach it from the Pi (ping its IP).
+* The Meshtastic Python library connects using its TCP interface (Meshtastic “API” over WiFi).
+
+
 ## Installation (Raspberry Pi 4)
 #### 1) System packages
-`sudo apt update`
-`sudo apt install -y python3 python3-venv python3-pip`
+```
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip
+```
 
 #### 2) Clone the repo
-`git clone https://github.com/<your-user>/<your-repo>.git
-cd <your-repo>
-`
+```
+git clone https://github.com/oh2gax/meshtastic_gateway.git
+cd meshtastic_gateway
+```
 #### 3) Create virtual environment + install dependencies
-`python3 -m venv venv`
-`source venv/bin/activate`
-`pip install --upgrade pip`
-`pip install meshtastic flask pypubsub`
-
+```
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install meshtastic flask pypubsub
+```
 
 If you prefer, create a requirements.txt:
 
+```
 meshtastic
 flask
 pypubsub
-
+```
 
 and install with:
 
@@ -89,10 +103,10 @@ and install with:
 Edit gateway_web.py and update the configuration section near the top:
 
 #### Meshtastic device IP address:
-`HOST = "192.168.1.211"`
+`HOST = "192.168.1.100"`
 
 #### SQLite database file path:
-`DB_PATH = "/home/pi/meshtastic/meshtastic_messages.db"`
+`DB_PATH = "/home/pi/meshtastic_gateway/meshtastic_messages.db"`
 
 #### Web UI bind address + port:
 `WEB_HOST = "0.0.0.0"`
@@ -108,46 +122,38 @@ WEB_HOST = "0.0.0.0" makes it accessible from other machines on your LAN.
 Use "127.0.0.1" if you want local-only access.
 
 ## 5) Run it
-`source venv/bin/activate`
-`python gateway_web.py`
+```
+source venv/bin/activate
+python gateway_web.py
+```
 
-
-##### Open in a browser:
+#### Open in a browser:
 
 `http://<raspberry-pi-ip>:8000`
 
-Meshtastic device setup (WiFi)
-
-On the Meshtastic device:
-
-Enable WiFi and connect it to your LAN (DHCP is fine).
-
-Confirm you can reach it from the Pi (ping its IP).
-
-The Meshtastic Python library connects using its TCP interface (Meshtastic “API” over WiFi).
 
 ## Common operations
 
-##### Send a direct message
+#### Send a direct message
 
 Use the web UI Outbox/Compose (or per-node Chat page) and select a node from the active list.
 
-##### Broadcast messages
+#### Broadcast messages
 
 Broadcast messages appear in the Broadcast page (chat style) and do not appear in Inbox/Outbox.
 
-##### Map
+#### Map
 
 * Shows last known positions for nodes that have positions.
 * Track lines can be enabled per node from the map UI.
 * Track length defaults to DEFAULT_MAP_TRACK_POINTS.
 
-##### Debug terminal
+#### Debug terminal
 
 * Shows raw incoming JSON packet data.
 * Supports pause/resume + copy-to-clipboard + basic filtering.
 
-##### Telemetry
+#### Telemetry
 
 Stores and graphs basic telemetry if present:
 
@@ -175,12 +181,13 @@ WorkingDirectory=/home/pi/<your-repo>
 ExecStart=/home/pi/<your-repo>/venv/bin/python /home/pi/<your-repo>/gateway_web.py
 Restart=always
 RestartSec=3
-```
+
 [Install]
 WantedBy=multi-user.target
 ```
-Enable + start:
 
+Enable + start:
+```
 sudo systemctl daemon-reload
 sudo systemctl enable meshtastic-gateway
 sudo systemctl start meshtastic-gateway

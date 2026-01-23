@@ -17,7 +17,6 @@ Subscribes to incoming packets and processes:
 * Broadcast messages
 * Node/user updates (long/short names, hardware model, etc.)
 * Positions (for map + tracks)
-* Telemetry (basic support)
 
 ## SQLite database
 
@@ -27,7 +26,6 @@ Subscribes to incoming packets and processes:
 * Broadcast chat (separate from Inbox/Outbox)
 * Nodes (latest known info)
 * Positions (for map markers + optional tracklines)
-* Telemetry time-series (temperature/lux/voltage/battery when present)
 
 Uses WAL mode, so you will see:
 ```
@@ -45,7 +43,6 @@ These -wal and -shm files are normal and required while the database is in WAL m
 * Active Nodes: list of heard nodes (selectable time windows)
 * Map: markers + optional per-node track lines (configurable last N points)
 * Chat: per-node chat view (direct messages)
-* Telemetry: view and graph telemetry per node and timeframe
 * Debug: “terminal” view of raw JSON packets with pause/copy/filtering
 * Status: shows latest “best-effort” live node stats from the interface (no history)
 
@@ -152,15 +149,6 @@ Broadcast messages appear in the Broadcast page (chat style) and do not appear i
 
 * Shows raw incoming JSON packet data.
 * Supports pause/resume + copy-to-clipboard + basic filtering.
-
-#### Telemetry
-
-Stores and graphs basic telemetry if present:
-
-* temperature (°C)
-* lux
-* voltage
-* battery level
 
 ## Running as a service (optional)
 

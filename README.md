@@ -161,7 +161,7 @@ Broadcast messages appear in the Broadcast page (chat style) and do not appear i
 
 #### Status
 
-Basic statuc information from node connected to gateway.
+Basic status information from node connected to gateway.
 
 #### Send a direct message
 

@@ -70,6 +70,27 @@ def utc_ts() -> int:
 def iso_utc(ts: int) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
+
+def derive_node_id(from_id: Optional[str], from_num: Any) -> Optional[str]:
+    """Return Meshtastic-style node id like '!db29583c' from fromId or numeric from."""
+    if from_id:
+        try:
+            s = str(from_id).strip()
+            return s if s else None
+        except Exception:
+            return None
+    try:
+        if isinstance(from_num, int):
+            return f"!{from_num & 0xFFFFFFFF:08x}"
+        # sometimes numeric is str
+        if isinstance(from_num, str) and from_num.isdigit():
+            n = int(from_num)
+            return f"!{n & 0xFFFFFFFF:08x}"
+    except Exception:
+        pass
+    return None
+
+
 def parse_window_to_seconds(window: str) -> int:
     w = (window or "").strip().lower()
     m = {"2h": 2 * 3600, "6h": 6 * 3600, "1d": 24 * 3600, "1w": 7 * 24 * 3600, "1m": 30 * 24 * 3600}
@@ -381,15 +402,35 @@ def upsert_node(conn: sqlite3.Connection,
             short_name = COALESCE(excluded.short_name, nodes.short_name),
             hw_model = COALESCE(excluded.hw_model, nodes.hw_model),
             macaddr = COALESCE(excluded.macaddr, nodes.macaddr),
-            last_seen_ts = COALESCE(excluded.last_seen_ts, nodes.last_seen_ts),
-            last_seen_iso = COALESCE(excluded.last_seen_iso, nodes.last_seen_iso),
+            last_seen_ts = CASE
+    WHEN excluded.last_seen_ts IS NULL THEN nodes.last_seen_ts
+    WHEN nodes.last_seen_ts IS NULL THEN excluded.last_seen_ts
+    WHEN excluded.last_seen_ts > nodes.last_seen_ts THEN excluded.last_seen_ts
+    ELSE nodes.last_seen_ts
+END,
+last_seen_iso = CASE
+    WHEN excluded.last_seen_ts IS NULL THEN nodes.last_seen_iso
+    WHEN nodes.last_seen_ts IS NULL THEN excluded.last_seen_iso
+    WHEN excluded.last_seen_ts > nodes.last_seen_ts THEN excluded.last_seen_iso
+    ELSE nodes.last_seen_iso
+END,
             last_rssi = COALESCE(excluded.last_rssi, nodes.last_rssi),
             last_snr = COALESCE(excluded.last_snr, nodes.last_snr),
             last_lat = COALESCE(excluded.last_lat, nodes.last_lat),
             last_lon = COALESCE(excluded.last_lon, nodes.last_lon),
             last_alt = COALESCE(excluded.last_alt, nodes.last_alt),
-            last_pos_ts = COALESCE(excluded.last_pos_ts, nodes.last_pos_ts),
-            last_pos_iso = COALESCE(excluded.last_pos_iso, nodes.last_pos_iso)
+            last_pos_ts = CASE
+    WHEN excluded.last_pos_ts IS NULL THEN nodes.last_pos_ts
+    WHEN nodes.last_pos_ts IS NULL THEN excluded.last_pos_ts
+    WHEN excluded.last_pos_ts > nodes.last_pos_ts THEN excluded.last_pos_ts
+    ELSE nodes.last_pos_ts
+END,
+last_pos_iso = CASE
+    WHEN excluded.last_pos_ts IS NULL THEN nodes.last_pos_iso
+    WHEN nodes.last_pos_ts IS NULL THEN excluded.last_pos_iso
+    WHEN excluded.last_pos_ts > nodes.last_pos_ts THEN excluded.last_pos_iso
+    ELSE nodes.last_pos_iso
+END
         """, (node_id, node_num, long_name, short_name, hw_model, macaddr,
               seen_ts, seen_iso, last_rssi, last_snr,
               lat, lon, alt, pos_ts, pos_iso))
@@ -757,15 +798,16 @@ class Gateway:
                 debug_add(packet)
             else:
                 debug_add({"raw": str(packet)})
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[GW] on_any_packet error: {e}")
 
         try:
             if not isinstance(packet, dict):
                 return
 
-            from_id = packet.get("fromId")
+            from_id_raw = packet.get("fromId")
             from_num = packet.get("from")
+            from_id = derive_node_id(from_id_raw, from_num)
             rx_rssi = packet.get("rxRssi")
             rx_snr = packet.get("rxSnr")
             rx_time = int(packet.get("rxTime", utc_ts()))
@@ -800,10 +842,12 @@ class Gateway:
 
 
             # Update last_seen and (if present) position
+            if from_id is None:
+                return
             pos = parse_position_from_packet(packet)
             upsert_node(
                 self.db,
-                node_id=str(from_id) if from_id else "",
+                node_id=from_id or "",
                 node_num=from_num,
                 last_seen_ts=rx_time,
                 last_rssi=rx_rssi,
@@ -816,10 +860,10 @@ class Gateway:
 
             if pos:
                 p_ts = int(pos.get("time") or rx_time)
-                insert_position(self.db, str(from_id), p_ts, pos["lat"], pos["lon"], pos.get("alt"), POSITION_KEEP_PER_NODE)
+                insert_position(self.db, from_id or "", p_ts, pos["lat"], pos["lon"], pos.get("alt"), POSITION_KEEP_PER_NODE)
 
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[GW] on_any_packet error: {e}")
 
     def on_text(self, packet, interface):
         try:

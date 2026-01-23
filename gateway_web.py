@@ -48,6 +48,9 @@ DEFAULT_ACTIVE_WINDOW = "6h"   # 2h, 6h, 1d, 1w, 1m supported
 DEFAULT_CHAT_LIMIT = 20
 DEFAULT_MAP_TRACK_POINTS = 60
 
+# How many position rows to keep per node (separate from the UI 'minutes' filter)
+POSITION_KEEP_PER_NODE = 5000
+
 # How often we re-scan iface.nodes to pick up late-arriving / changed names & HW fields
 NODE_REFRESH_INTERVAL_SEC = 30
 
@@ -378,64 +381,15 @@ def upsert_node(conn: sqlite3.Connection,
             short_name = COALESCE(excluded.short_name, nodes.short_name),
             hw_model = COALESCE(excluded.hw_model, nodes.hw_model),
             macaddr = COALESCE(excluded.macaddr, nodes.macaddr),
-
-            -- Only move last_seen forward (refresh_nodes_from_iface may have stale lastHeard)
-            last_seen_ts = CASE
-                WHEN excluded.last_seen_ts IS NOT NULL
-                 AND (nodes.last_seen_ts IS NULL OR excluded.last_seen_ts >= nodes.last_seen_ts)
-                THEN excluded.last_seen_ts
-                ELSE nodes.last_seen_ts
-            END,
-            last_seen_iso = CASE
-                WHEN excluded.last_seen_ts IS NOT NULL
-                 AND (nodes.last_seen_ts IS NULL OR excluded.last_seen_ts >= nodes.last_seen_ts)
-                THEN excluded.last_seen_iso
-                ELSE nodes.last_seen_iso
-            END,
-            last_rssi = CASE
-                WHEN excluded.last_seen_ts IS NOT NULL
-                 AND (nodes.last_seen_ts IS NULL OR excluded.last_seen_ts >= nodes.last_seen_ts)
-                THEN COALESCE(excluded.last_rssi, nodes.last_rssi)
-                ELSE nodes.last_rssi
-            END,
-            last_snr = CASE
-                WHEN excluded.last_seen_ts IS NOT NULL
-                 AND (nodes.last_seen_ts IS NULL OR excluded.last_seen_ts >= nodes.last_seen_ts)
-                THEN COALESCE(excluded.last_snr, nodes.last_snr)
-                ELSE nodes.last_snr
-            END,
-
-            -- Only move position forward, too
-            last_lat = CASE
-                WHEN excluded.last_pos_ts IS NOT NULL
-                 AND (nodes.last_pos_ts IS NULL OR excluded.last_pos_ts >= nodes.last_pos_ts)
-                THEN COALESCE(excluded.last_lat, nodes.last_lat)
-                ELSE nodes.last_lat
-            END,
-            last_lon = CASE
-                WHEN excluded.last_pos_ts IS NOT NULL
-                 AND (nodes.last_pos_ts IS NULL OR excluded.last_pos_ts >= nodes.last_pos_ts)
-                THEN COALESCE(excluded.last_lon, nodes.last_lon)
-                ELSE nodes.last_lon
-            END,
-            last_alt = CASE
-                WHEN excluded.last_pos_ts IS NOT NULL
-                 AND (nodes.last_pos_ts IS NULL OR excluded.last_pos_ts >= nodes.last_pos_ts)
-                THEN COALESCE(excluded.last_alt, nodes.last_alt)
-                ELSE nodes.last_alt
-            END,
-            last_pos_ts = CASE
-                WHEN excluded.last_pos_ts IS NOT NULL
-                 AND (nodes.last_pos_ts IS NULL OR excluded.last_pos_ts >= nodes.last_pos_ts)
-                THEN excluded.last_pos_ts
-                ELSE nodes.last_pos_ts
-            END,
-            last_pos_iso = CASE
-                WHEN excluded.last_pos_ts IS NOT NULL
-                 AND (nodes.last_pos_ts IS NULL OR excluded.last_pos_ts >= nodes.last_pos_ts)
-                THEN excluded.last_pos_iso
-                ELSE nodes.last_pos_iso
-            END
+            last_seen_ts = COALESCE(excluded.last_seen_ts, nodes.last_seen_ts),
+            last_seen_iso = COALESCE(excluded.last_seen_iso, nodes.last_seen_iso),
+            last_rssi = COALESCE(excluded.last_rssi, nodes.last_rssi),
+            last_snr = COALESCE(excluded.last_snr, nodes.last_snr),
+            last_lat = COALESCE(excluded.last_lat, nodes.last_lat),
+            last_lon = COALESCE(excluded.last_lon, nodes.last_lon),
+            last_alt = COALESCE(excluded.last_alt, nodes.last_alt),
+            last_pos_ts = COALESCE(excluded.last_pos_ts, nodes.last_pos_ts),
+            last_pos_iso = COALESCE(excluded.last_pos_iso, nodes.last_pos_iso)
         """, (node_id, node_num, long_name, short_name, hw_model, macaddr,
               seen_ts, seen_iso, last_rssi, last_snr,
               lat, lon, alt, pos_ts, pos_iso))
@@ -631,22 +585,32 @@ def list_nodes_with_position(conn: sqlite3.Connection, window_seconds: int) -> L
         """, (cutoff,))
         return cur.fetchall()
 
-def get_track_points(conn: sqlite3.Connection, node_id: str, n_points: int) -> List[Tuple[float, float]]:
+def get_track_points(conn: sqlite3.Connection, node_id: str, minutes: int) -> List[Tuple[float, float]]:
+    """Return track points for the last N minutes, limited to the current UTC date."""
     conn.row_factory = sqlite3.Row
-    n_points = max(10, min(int(n_points), 2000))
+    minutes = max(1, min(int(minutes), 24 * 60))  # cap at 24h
+
+    now = utc_ts()
+    cutoff = now - minutes * 60
+
+    # limit to current UTC date (00:00 UTC .. now)
+    dt_now = datetime.fromtimestamp(now, tz=timezone.utc)
+    start_of_day = int(datetime(dt_now.year, dt_now.month, dt_now.day, tzinfo=timezone.utc).timestamp())
+    if cutoff < start_of_day:
+        cutoff = start_of_day
+
     with DB_LOCK:
         cur = conn.cursor()
         cur.execute("""
         SELECT lat, lon
         FROM positions
-        WHERE node_id=?
-        ORDER BY ts DESC, id DESC
-        LIMIT ?
-        """, (node_id, n_points))
+        WHERE node_id = ?
+          AND ts >= ?
+        ORDER BY ts ASC, id ASC
+        """, (node_id, cutoff))
         rows = cur.fetchall()
-    pts = [(float(r["lat"]), float(r["lon"])) for r in rows]
-    pts.reverse()
-    return pts
+
+    return [(float(r["lat"]), float(r["lon"])) for r in rows]
 
 def chat_messages(conn: sqlite3.Connection, node_id: str, limit: int) -> List[sqlite3.Row]:
     conn.row_factory = sqlite3.Row
@@ -748,7 +712,7 @@ class Gateway:
             )
 
             if pos and pos.get("time"):
-                insert_position(self.db, resolved_id, int(pos["time"]), pos["lat"], pos["lon"], pos.get("alt"), DEFAULT_MAP_TRACK_POINTS)
+                insert_position(self.db, resolved_id, int(pos["time"]), pos["lat"], pos["lon"], pos.get("alt"), POSITION_KEEP_PER_NODE)
 
     def refresh_nodes_from_iface(self, force: bool = False) -> None:
         """Refresh long/short name + HW fields from iface.nodes (late-arriving / changed names)."""
@@ -852,7 +816,7 @@ class Gateway:
 
             if pos:
                 p_ts = int(pos.get("time") or rx_time)
-                insert_position(self.db, str(from_id), p_ts, pos["lat"], pos["lon"], pos.get("alt"), DEFAULT_MAP_TRACK_POINTS)
+                insert_position(self.db, str(from_id), p_ts, pos["lat"], pos["lon"], pos.get("alt"), POSITION_KEEP_PER_NODE)
 
         except Exception:
             pass
@@ -1062,7 +1026,7 @@ def map_view():
     window = request.args.get("window", DEFAULT_ACTIVE_WINDOW)
     win_sec = parse_window_to_seconds(window)
     track_n = int(request.args.get("n", str(DEFAULT_MAP_TRACK_POINTS)))
-    track_n = max(10, min(track_n, 2000))
+    track_n = max(1, min(track_n, 24 * 60))
     rows = list_nodes_with_position(DB_CONN, win_sec)
     if rows:
         center_lat = float(rows[0]["last_lat"])
@@ -1096,7 +1060,7 @@ def map_data():
 def map_tracks():
     ids = (request.args.get("ids", "") or "").strip()
     n = int(request.args.get("n", str(DEFAULT_MAP_TRACK_POINTS)))
-    n = max(10, min(n, 2000))
+    n = max(1, min(n, 24 * 60))
     node_ids = [x.strip() for x in ids.split(",") if x.strip().startswith("!")]
     node_ids = node_ids[:25]
     tracks: Dict[str, List[List[float]]] = {}

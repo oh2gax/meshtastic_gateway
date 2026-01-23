@@ -140,10 +140,6 @@ All received direct messages, their date/time, RSSI, SNR and button to delete ch
 
 All sent messages and their destination with delete button.
 
-#### Send a direct message
-
-Use the web UI Outbox/Compose (or per-node Chat page) and select a node from the active list.
-
 #### Active nodes
 
 All received nodes with timestamp and RSSI, SNR and position information. Filtered based time window selection.
@@ -166,6 +162,10 @@ Broadcast messages appear in the Broadcast page (chat style) and do not appear i
 #### Status
 
 Basic statuc information from node connected to gateway.
+
+#### Send a direct message
+
+Use the web UI Outbox/Compose (or per-node Chat page) and select a node from the active list.
 
 ## Running as a service (optional)
 

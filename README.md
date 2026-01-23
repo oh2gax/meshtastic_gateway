@@ -120,6 +120,7 @@ Use "127.0.0.1" if you want local-only access.
 
 ## 5) Run it
 ```
+python3 -m venv venv
 source venv/bin/activate
 python3 gateway_web.py
 ```

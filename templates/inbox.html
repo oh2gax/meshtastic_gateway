@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block extra_head %}
+
+{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="m-0">Inbox (latest {{limit}})</h5>
+      <div class="smallish">
+        <a href="{{ url_for('inbox', limit=50) }}">50</a> |
+        <a href="{{ url_for('inbox', limit=200) }}">200</a> |
+        <a href="{{ url_for('inbox', limit=1000) }}">1000</a>
+      </div>
+    </div>
+    <div class="table-responsive">
+    <table class="table table-sm table-striped align-middle">
+      <thead><tr>
+        <th>Time</th><th>From</th><th>Text</th><th>RSSI</th><th>SNR</th><th></th>
+      </tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td class="mono">{{ r["ts_iso"] }}</td>
+          <td>
+            <div>{{ node_display(r["from_long"], r["from_short"], r["from_id"]) }}</div>
+            <div class="small dim mono">{{ r["from_id"] }}</div>
+            <div class="small text-muted">
+              <a href="{{ url_for('chat_with', node_id=r['from_id']) }}">Chat</a> ·
+              <a href="{{ url_for('send_form', to_id=r['from_id']) }}">Reply</a>
+            </div>
+          </td>
+          <td>{{ r["text"] }}</td>
+          <td class="mono">{{ r["rx_rssi"] }}</td>
+          <td class="mono">{{ r["rx_snr"] }}</td>
+          <td class="text-end">
+            <form method="post" action="{{ url_for('message_delete', msg_id=r['id']) }}" onsubmit="return confirm('Delete this message?');">
+              <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+{% endblock %}

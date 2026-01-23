@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block extra_head %}
+
+{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="m-0">Active nodes <span class="chip mono">window={{window}}</span></h5>
+      <div class="d-flex gap-2 align-items-center">
+        <div class="smallish">
+          <a href="{{ url_for('nodes', window='2h') }}">2h</a> |
+          <a href="{{ url_for('nodes', window='6h') }}">6h</a> |
+          <a href="{{ url_for('nodes', window='1d') }}">1d</a> |
+          <a href="{{ url_for('nodes', window='1w') }}">1w</a> |
+          <a href="{{ url_for('nodes', window='1m') }}">1m</a>
+        </div>
+        <a class="btn btn-sm btn-primary" href="{{ url_for('send_form') }}">Send</a>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+    <table class="table table-sm table-striped align-middle">
+      <thead><tr>
+        <th>Last seen</th><th>Node</th><th>Name</th><th>HW</th><th>RSSI</th><th>SNR</th><th>Pos</th><th></th>
+      </tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td class="mono">{{ r["last_seen_iso"] }}</td>
+          <td class="mono">{{ r["node_id"] }}</td>
+          <td>{{ node_display(r["long_name"], r["short_name"], r["node_id"]) }}</td>
+          <td class="mono">{{ r["hw_model"] }}</td>
+          <td class="mono">{{ r["last_rssi"] }}</td>
+          <td class="mono">{{ r["last_snr"] }}</td>
+          <td class="mono">
+            {% if r["last_lat"] and r["last_lon"] %}
+              {{ "%.5f"|format(r["last_lat"]) }}, {{ "%.5f"|format(r["last_lon"]) }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td class="text-end small">
+            <a href="{{ url_for('chat_with', node_id=r['node_id']) }}">Chat</a> ·
+            <a href="{{ url_for('send_form', to_id=r['node_id']) }}">Send</a>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+{% endblock %}

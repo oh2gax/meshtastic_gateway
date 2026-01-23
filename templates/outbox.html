@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block extra_head %}
+
+{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="m-0">Outbox (latest {{limit}})</h5>
+      <div class="smallish">
+        <a href="{{ url_for('outbox_view', limit=50) }}">50</a> |
+        <a href="{{ url_for('outbox_view', limit=200) }}">200</a> |
+        <a href="{{ url_for('outbox_view', limit=1000) }}">1000</a>
+      </div>
+    </div>
+    <div class="table-responsive">
+    <table class="table table-sm table-striped align-middle">
+      <thead><tr>
+        <th>Created</th><th>Status</th><th>To</th><th>Text</th><th>Tries</th><th></th>
+      </tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td class="mono">{{ r["created_ts_iso"] }}</td>
+          <td class="mono">{{ r["status"] }}</td>
+          <td>
+            {% if r["to_id"] %}
+              <div>{{ node_display(r["to_long"], r["to_short"], r["to_id"]) }}</div>
+              <div class="small dim mono">{{ r["to_id"] }}</div>
+              <div class="small text-muted"><a href="{{ url_for('chat_with', node_id=r['to_id']) }}">Chat</a></div>
+            {% else %}
+              <b>BROADCAST</b>
+            {% endif %}
+          </td>
+          <td>{{ r["text"] }}</td>
+          <td class="mono">{{ r["tries"] }}</td>
+          <td class="text-end">
+            <form method="post" action="{{ url_for('outbox_delete', out_id=r['id']) }}" onsubmit="return confirm('Delete this outbox entry?');">
+              <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% if r["last_error"] %}
+          <tr><td colspan="6" class="small text-danger mono">Error: {{ r["last_error"] }}</td></tr>
+        {% endif %}
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+{% endblock %}

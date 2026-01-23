@@ -121,7 +121,7 @@ Use "127.0.0.1" if you want local-only access.
 ## 5) Run it
 ```
 source venv/bin/activate
-python gateway_web.py
+python3 gateway_web.py
 ```
 
 #### Open in a browser:
@@ -143,7 +143,7 @@ Broadcast messages appear in the Broadcast page (chat style) and do not appear i
 
 * Shows last known positions for nodes that have positions.
 * Track lines can be enabled per node from the map UI.
-* Track length defaults to DEFAULT_MAP_TRACK_POINTS.
+* Track length (minutes) can be set changing Track points setting (default=60).
 
 #### Debug terminal
 
@@ -166,7 +166,7 @@ Wants=network-online.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/<your-repo>
-ExecStart=/home/pi/<your-repo>/venv/bin/python /home/pi/<your-repo>/gateway_web.py
+ExecStart=/home/pi/<your-repo>/venv/bin/python3 /home/pi/<your-repo>/gateway_web.py
 Restart=always
 RestartSec=3
 

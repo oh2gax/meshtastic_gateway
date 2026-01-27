@@ -39,12 +39,12 @@ These -wal and -shm files are normal and required while the database is in WAL m
 
 * Inbox: received direct messages
 * Outbox: sent direct messages and send queue status
-* Broadcast: chat-style view of broadcast channel messages (separate from Inbox/Outbox)
 * Active Nodes: list of heard nodes (selectable time windows)
+* Broadcast: chat-style view of broadcast channel messages (separate from Inbox/Outbox)
 * Map: markers + optional per-node track lines (configurable last N points)
-* Chat: per-node chat view (direct messages)
 * Debug: “terminal” view of raw JSON packets with pause/copy/filtering
 * Status: shows latest “best-effort” live node stats from the interface (no history)
+* Send: per-node chat / send message view (direct messages)
 
 ## Requirements
 

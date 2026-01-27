@@ -125,6 +125,21 @@ source venv/bin/activate
 python3 gateway_web.py
 ```
 
+## or run in background
+
+```
+nohup python3 gateway_web_.py > /dev/null 2>&1 &
+ps -ef
+```
+
+## kill running background process
+
+```
+ps -ef
+kill <process number>
+```
+
+
 #### Open in a browser:
 
 `http://<raspberry-pi-ip>:8000`

@@ -225,11 +225,12 @@ sudo systemctl status meshtastic-gateway
 ```
 Database files (.db / .db-wal / .db-shm)
 
-### If you see:
+### Database files:
 
+```
 meshtastic_messages.db-wal
-
 meshtastic_messages.db-shm
+```
 
 That’s expected. SQLite WAL mode uses these for performance and safe concurrency while the app is running. Do not delete them while the gateway is running.
 

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="container py-3">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0">Services</h4>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <h5 class="card-title mb-3">METAR Weather Service</h5>
+      <p class="text-muted mb-3">
+        Reply with the latest METAR when a node sends a private message like <code>wx efhk</code>.
+      </p>
+
+      <form method="post" action="{{ url_for('services_post') }}" class="row g-2 align-items-end">
+        <div class="col-auto">
+          <label class="form-label mb-0 small">Service</label>
+          <select class="form-select" name="metar_enabled" style="min-width: 220px;">
+            <option value="1" {% if metar_enabled %}selected{% endif %}>Enabled</option>
+            <option value="0" {% if not metar_enabled %}selected{% endif %}>Disabled</option>
+          </select>
+        </div>
+        <div class="col-auto">
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+<hr class="my-4"/>
+
+<h6 class="mb-2">Latest METAR requests</h6>
+<div class="small text-muted mb-2">Last 50 requests (UTC).</div>
+<div class="border rounded p-2" style="background: #0b1220; color: #d7e3ff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px; max-height: 280px; overflow: auto;">
+  {% if metar_log and metar_log|length > 0 %}
+    {% for r in metar_log %}
+      <div>{{ r['ts_iso'] }} | {{ r['from_id'] or '' }} | {{ (r['query'] or '')|upper }} | {{ r['status'] }}{% if r['note'] %} | {{ r['note'] }}{% endif %}</div>
+    {% endfor %}
+  {% else %}
+    <div>(no requests yet)</div>
+  {% endif %}
+</div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

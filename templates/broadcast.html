@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block extra_head %}
+
+{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="m-0">Broadcast <span class="chip mono">last={{limit}}</span></h5>
+      <div class="smallish">
+        <a href="{{ url_for('broadcast', limit=50) }}">50</a> |
+        <a href="{{ url_for('broadcast', limit=100) }}">100</a> |
+        <a href="{{ url_for('broadcast', limit=500) }}">500</a>
+      </div>
+    </div>
+
+    {% if queued %}
+      <div class="alert alert-warning py-2">
+        <b>Queued broadcast messages:</b>
+        <ul class="mb-0">
+          {% for q in queued %}
+            <li class="mono">#{{ q["id"] }} · {{ q["created_ts_iso"] }} · {{ q["text"] }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <div class="card mb-3">
+      <div class="card-body" id="broadcastBox" style="max-height:60vh; overflow:auto;">
+        {% for m in msgs %}
+          <div class="mb-2">
+            <div class="small text-muted mono">{{ m["ts_iso"] }} · {{ m["direction"] }}</div>
+            <div>
+              {% if m["direction"] == "in" %}
+                {{ node_display(m["from_long"], m["from_short"], m["from_id"]) }}:
+              {% else %}
+                <b>Me</b>:
+              {% endif %}
+              {{ m["text"] }}
+              {% if m["direction"] == "in" %}
+                <span class="small text-muted mono"> (RSSI {{ m["rx_rssi"] }}, SNR {{ m["rx_snr"] }})</span>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+        {% if not msgs %}
+          <div class="text-muted">No broadcast messages yet.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('broadcast_send') }}" class="card card-body">
+      <div class="mb-2">
+        <label class="form-label">Send broadcast</label>
+        <textarea class="form-control" name="text" rows="2" maxlength="240" required></textarea>
+      </div>
+      <button class="btn btn-primary" type="submit">Queue broadcast</button>
+    </form>
+    
+
+<script>
+(function(){
+  const box = document.getElementById("broadcastBox");
+  if (box) { box.scrollTop = box.scrollHeight; }
+})();
+</script>
+{% endblock %}

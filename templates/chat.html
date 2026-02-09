@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block extra_head %}
+
+{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="m-0">Chat with <b>{{ title_name }}</b> <span class="mono dim">{{node_id}}</span></h5>
+      <div class="smallish">
+        <a href="{{ url_for('chat_with', node_id=node_id, limit=20) }}">20</a> |
+        <a href="{{ url_for('chat_with', node_id=node_id, limit=100) }}">100</a> |
+        <a href="{{ url_for('chat_with', node_id=node_id, limit=500) }}">500</a>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-body" style="max-height:60vh; overflow:auto;">
+        {% for m in msgs %}
+          <div class="mb-2">
+            <div class="small text-muted mono">{{ m["ts_iso"] }} · {{ m["direction"] }}</div>
+            <div>
+              {% if m["direction"] == "in" %}
+                <b>{{ node_display(m["from_long"], m["from_short"], m["from_id"]) }}</b>:
+              {% else %}
+                <b>Me</b> → <b>{{ node_display(m["to_long"], m["to_short"], m["to_id"]) }}</b>:
+              {% endif %}
+              {{ m["text"] }}
+            </div>
+          </div>
+        {% endfor %}
+        {% if not msgs %}
+          <div class="text-muted">No messages yet.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('send_post') }}" class="card card-body">
+      <input type="hidden" name="to_id" value="{{ node_id }}">
+      <div class="mb-2">
+        <label class="form-label">Send to {{ title_name }}</label>
+        <textarea class="form-control" name="text" rows="2" maxlength="240" required></textarea>
+      </div>
+      <button class="btn btn-primary" type="submit">Queue</button>
+    </form>
+{% endblock %}

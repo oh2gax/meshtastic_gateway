@@ -1,9 +1,0 @@
-body { padding-top: 20px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
-    .smallish { font-size: 0.92rem; }
-    pre.debugbox { background: #0b0f14; color: #cfe3ff; padding: 12px; border-radius: 10px; max-height: 70vh; overflow: auto; }
-    .sidebar { max-height: 70vh; overflow: auto; }
-    .nodeitem { cursor:pointer; }
-    .nodeitem:hover { background: #f6f8ff; }
-    .chip { display:inline-block; padding: 2px 8px; border-radius: 999px; background: #eef2ff; }
-    .dim { color: #6c757d; }

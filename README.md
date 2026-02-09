@@ -17,6 +17,8 @@ Subscribes to incoming packets and processes:
 * Broadcast messages
 * Node/user updates (long/short names, hardware model, etc.)
 * Positions (for map + tracks)
+* Traffic debug
+* Message services
 
 ## SQLite database
 

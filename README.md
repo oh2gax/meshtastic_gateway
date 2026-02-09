@@ -223,9 +223,10 @@ sudo systemctl enable meshtastic-gateway
 sudo systemctl start meshtastic-gateway
 sudo systemctl status meshtastic-gateway
 ```
-Database files (.db / .db-wal / .db-shm)
 
 ### Database files:
+
+Database files (.db / .db-wal / .db-shm)
 
 ```
 meshtastic_messages.db-wal

@@ -44,6 +44,7 @@ These -wal and -shm files are normal and required while the database is in WAL m
 * Map: markers + optional per-node track lines (configurable last N points)
 * Debug: “terminal” view of raw JSON packets with pause/copy/filtering
 * Status: shows latest “best-effort” live node stats from the interface (no history)
+* Services: Message services. METAR weather report service.
 * Send: per-node chat / send message view (direct messages)
 
 ## Requirements
@@ -177,6 +178,15 @@ Broadcast messages appear in the Broadcast page (chat style) and do not appear i
 #### Status
 
 Basic status information from node connected to gateway.
+
+#### Services
+
+Enable or Disable different services integrated into Meshtastic Gateway. Currently METAR weather report
+service is implemented. Sending Direct message to gateway with ie. text "wx efhk" (For Helsinki-Vantaa) 
+latest METAR report for specified airport is send back to device. User can request METAR for any airport globally 
+just changing ICAO airport code.
+
+Latest 50 METAR requests are displayed on log window to have basic debugging and monitoring about message server traffic.
 
 #### Send a direct message
 

@@ -234,7 +234,7 @@ meshtastic_messages.db-shm
 
 That’s expected. SQLite WAL mode uses these for performance and safe concurrency while the app is running. Do not delete them while the gateway is running.
 
-#### Security notes
+## Security notes
 
 The web UI has no authentication by default.
 

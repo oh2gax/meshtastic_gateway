@@ -225,7 +225,7 @@ sudo systemctl status meshtastic-gateway
 ```
 Database files (.db / .db-wal / .db-shm)
 
-#### If you see:
+### If you see:
 
 meshtastic_messages.db-wal
 

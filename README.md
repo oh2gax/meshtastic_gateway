@@ -49,6 +49,8 @@ These -wal and -shm files are normal and required while the database is in WAL m
 * Services: Message services. METAR weather report service.
 * Send: per-node chat / send message view (direct messages)
 
+See Meshtastic_Gateway.pdf for UI overview and screenshots.
+
 ## Requirements
 
 Raspberry Pi OS (or Debian/Ubuntu)

@@ -31,9 +31,29 @@
         </div></div>
       </div>
 
-      <div class="col-md-12">
+      <div class="col-md-6">
         <div class="card"><div class="card-body">
-          
+          <div class="small text-muted mb-1">Maintenance</div>
+          <div class="small mb-2">
+            Remove "unknown" nodes (no name received) from this gateway and the connected device's NodeDB.
+            The gateway also clears them automatically after {{ unknown_auto_age_hours }} h.
+          </div>
+          {% if cleanup %}
+            <div class="alert alert-info py-2 px-3 mb-2 small">
+              Last cleanup &mdash; scanned: {{ cleanup.scanned }},
+              removed: {{ cleanup.removed }},
+              skipped: {{ cleanup.skipped }},
+              failed: {{ cleanup.failed }}.
+            </div>
+          {% endif %}
+          <form method="post" action="{{ url_for('status_remove_unknown') }}"
+                onsubmit="return confirm('Remove all unknown nodes now?');" class="m-0">
+            <button class="btn btn-sm btn-outline-danger" type="submit"
+                    {% if not connected %}disabled title="Gateway not connected to device"{% endif %}>
+              Remove unknown nodes now
+            </button>
+          </form>
+        </div></div>
       </div>
     </div>
 

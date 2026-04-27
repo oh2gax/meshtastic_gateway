@@ -125,7 +125,7 @@ pip install -r requirements.txt
 
 ### 4) Configure the gateway
 
-Edit the main script (e.g. `gateway_web_new_stable_v11.py`) and update the configuration section near the top.
+Edit the main script (e.g. `gateway_web_stable.py`) and update the configuration section near the top.
 
 Meshtastic device IP address:
 
@@ -155,13 +155,13 @@ Notes:
 
 ```
 source venv/bin/activate
-python3 gateway_web_new_stable_v11.py
+python3 gateway_web_stable.py
 ```
 
 To run in the background:
 
 ```
-nohup python3 gateway_web_new_stable_v11.py > /dev/null 2>&1 &
+nohup python3 gateway_web_stable.py > /dev/null 2>&1 &
 ps -ef
 ```
 
@@ -272,7 +272,7 @@ Wants=network-online.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/<your-repo>
-ExecStart=/home/pi/<your-repo>/venv/bin/python3 /home/pi/<your-repo>/gateway_web_new_stable_v11.py
+ExecStart=/home/pi/<your-repo>/venv/bin/python3 /home/pi/<your-repo>/gateway_web_stable.py
 Restart=always
 RestartSec=3
 

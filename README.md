@@ -55,7 +55,7 @@ The gateway performs lightweight schema migrations automatically on startup, so 
 
 - **Inbox** — received direct messages, with unread highlighting and per-message *Mark read* / *Delete* buttons (see *New message notifications* below).
 - **Outbox** — sent direct messages and send queue status, including ACK status per outgoing message.
-- **Active Nodes** — list of heard nodes with selectable time windows, including a *Pos* indicator (`Y` if a position is known, otherwise `—`) and a *Hops* column showing how many hops away each node is (`0` = direct neighbor, `—` = unknown).
+- **Active Nodes** — list of heard nodes with selectable time windows, including a *Pos* indicator (`Y` if a position is known, otherwise `—`) and a *Hops* column showing how many hops away each node is (`0` = direct neighbor, `—` = unknown). Optional auto-refresh (`Off` / `10s` / `30s` / `60s`).
 - **Broadcast** — chat-style view of broadcast traffic. A channel selector at the top lets you view any of the channels configured on your Meshtastic device, and you can broadcast a message to the currently selected channel from the same page. Broadcast traffic is kept separate from Inbox/Outbox.
 - **Map** — last known positions of all heard nodes. Filled circles show node location (green = recent, blue = older); the side list shows hop count and distance per node, and clicking a node opens a popup with full details including hop count. Optional per-node track lines, configurable last *N* points. The map automatically uses light or dark tiles depending on the theme setting.
 - **Debug** — terminal-style view of raw JSON packets, with pause/copy/filter controls.
@@ -211,6 +211,8 @@ All heard nodes with timestamp, RSSI/SNR and other per-node info, filtered by a 
 - **Hops** — how many hops the most recent packet from this node travelled to reach the gateway. `0` means a direct neighbor (heard on-air with no relay); `1`, `2`, … indicate the number of relays involved. `—` means the hop information was not available in the packets seen so far (e.g. older firmware or packet types that don't carry it).
 
 The Hops value reflects the most recent packet from each node. If a relay path changes, the value updates the next time we hear from that node.
+
+A *Refresh* dropdown next to the time-window links lets you set the page to auto-refresh at a fixed interval (`10s`, `30s`, `60s`) or leave it `Off` (default). The choice is remembered in the browser via `localStorage`, so it sticks across visits without affecting other pages.
 
 ### Broadcast messages
 

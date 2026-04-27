@@ -961,6 +961,149 @@ def list_active_nodes(conn: sqlite3.Connection, window_seconds: int) -> List[sql
         """, (cutoff,))
         return cur.fetchall()
 
+
+# ---------------------------------------------------------------------------
+# Unknown-node cleanup
+# ---------------------------------------------------------------------------
+# A node is "unknown" if we have its node_num but never received a NodeInfo
+# packet that would tell us its long/short name. Such rows accumulate when we
+# overhear traffic from distant nodes whose NodeInfo doesn't reach us.
+
+UNKNOWN_NODE_AUTO_CLEAN_AGE_SEC = 24 * 3600           # 24 hours
+UNKNOWN_NODE_AUTO_CLEAN_INTERVAL_SEC = 30 * 60        # check twice an hour
+
+
+def find_unknown_node_rows(conn: sqlite3.Connection,
+                           min_age_seconds: Optional[int] = None) -> List[sqlite3.Row]:
+    """Return rows for nodes with no long_name and no short_name. If
+    min_age_seconds is given, only rows older than that (by last_seen_ts)
+    are returned."""
+    conn.row_factory = sqlite3.Row
+    with DB_LOCK:
+        cur = conn.cursor()
+        sql = """
+        SELECT node_id, node_num, last_seen_ts
+        FROM nodes
+        WHERE (long_name IS NULL OR long_name = '')
+          AND (short_name IS NULL OR short_name = '')
+        """
+        params: List[Any] = []
+        if min_age_seconds is not None:
+            sql += " AND last_seen_ts IS NOT NULL AND last_seen_ts <= ?"
+            params.append(utc_ts() - int(min_age_seconds))
+        cur.execute(sql, params)
+        return cur.fetchall()
+
+
+def remove_node_from_device(node_num: Optional[int],
+                            node_id: Optional[str] = None) -> Tuple[bool, str]:
+    """Send an admin command to the local Meshtastic device asking it to
+    remove the given node from its NodeDB. Also evict the node from the
+    Python library's in-memory caches (iface.nodes / iface.nodesByNum) so
+    the gateway's periodic refresh doesn't immediately re-create the row.
+    Returns (ok, error_msg)."""
+    try:
+        if gateway.iface is None:
+            return False, "no interface"
+        if node_num is None:
+            return False, "missing node_num"
+        ln = getattr(gateway.iface, "localNode", None)
+        if ln is None:
+            return False, "no localNode"
+        try:
+            ln.removeNode(int(node_num))
+        except AttributeError:
+            # Older library versions used deleteNode
+            ln.deleteNode(int(node_num))  # type: ignore[attr-defined]
+        # Evict from the library's caches so refresh_nodes_from_iface
+        # doesn't resurrect the node a few seconds later.
+        try:
+            iface_nodes = getattr(gateway.iface, "nodes", None)
+            if isinstance(iface_nodes, dict):
+                if node_id:
+                    iface_nodes.pop(node_id, None)
+                # Also clean any cache entry that just matches by num,
+                # in case the key form differs.
+                for k, v in list(iface_nodes.items()):
+                    try:
+                        if isinstance(v, dict) and v.get("num") == int(node_num):
+                            iface_nodes.pop(k, None)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        try:
+            iface_nodes_by_num = getattr(gateway.iface, "nodesByNum", None)
+            if isinstance(iface_nodes_by_num, dict):
+                iface_nodes_by_num.pop(int(node_num), None)
+        except Exception:
+            pass
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
+def delete_node_from_db(conn: sqlite3.Connection, node_id: str) -> None:
+    if not node_id:
+        return
+    with DB_LOCK:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM nodes WHERE node_id = ?", (node_id,))
+        conn.commit()
+
+
+def remove_unknown_nodes(min_age_seconds: Optional[int] = None) -> Dict[str, int]:
+    """Find unknown nodes and remove each from the device's NodeDB and the
+    gateway's local DB. Refuses to touch the gateway's own node. Returns a
+    summary dict with counts."""
+    rows = find_unknown_node_rows(DB_CONN, min_age_seconds=min_age_seconds)
+    own = getattr(gateway, "my_id", None)
+    removed = failed = skipped = 0
+    for r in rows:
+        node_id = r["node_id"]
+        node_num = r["node_num"]
+        if node_id and own and str(node_id) == str(own):
+            skipped += 1
+            continue
+        ok, err = remove_node_from_device(node_num, node_id=node_id)
+        if ok:
+            delete_node_from_db(DB_CONN, node_id)
+            removed += 1
+            try:
+                debug_add({"ts": iso_now(), "type": "admin",
+                           "note": f"removed unknown node {node_id} (num={node_num})"})
+            except Exception:
+                pass
+        else:
+            failed += 1
+            try:
+                debug_add({"ts": iso_now(), "type": "admin",
+                           "note": f"remove failed for {node_id}: {err}"})
+            except Exception:
+                pass
+    return {"scanned": len(rows), "removed": removed,
+            "failed": failed, "skipped": skipped}
+
+
+def _unknown_node_cleanup_loop() -> None:
+    """Background loop: periodically purge unknown nodes older than the
+    configured age threshold."""
+    while True:
+        try:
+            time.sleep(UNKNOWN_NODE_AUTO_CLEAN_INTERVAL_SEC)
+            res = remove_unknown_nodes(min_age_seconds=UNKNOWN_NODE_AUTO_CLEAN_AGE_SEC)
+            if res.get("removed") or res.get("failed"):
+                print(f"[GW] unknown-cleanup: {res}")
+        except Exception as e:
+            print(f"[GW] unknown-cleanup loop error: {e}")
+
+
+def start_unknown_cleanup_thread() -> threading.Thread:
+    t = threading.Thread(target=_unknown_node_cleanup_loop,
+                         name="unknown-cleanup", daemon=True)
+    t.start()
+    return t
+
 def list_nodes_with_position(conn: sqlite3.Connection, window_seconds: int) -> List[sqlite3.Row]:
     conn.row_factory = sqlite3.Row
     cutoff = utc_ts() - window_seconds
@@ -1933,14 +2076,13 @@ def services_view():
         with DB_LOCK:
             cur = DB_CONN.cursor()
             cur.execute("""
-                SELECT ts_iso, from_id, to_id, query, status, note
+                SELECT ts_iso, from_id, query, status, note
                 FROM service_log
                 WHERE service = 'metar'
-                ORDER BY ts DESC
-                LIMIT 50
+                ORDER BY ts DESC LIMIT 50
             """)
             metar_log = cur.fetchall()
-    except sqlite3.OperationalError:
+    except Exception:
         metar_log = []
     return render_template(
         "services.html", host=HOST, extra_head="",
@@ -2046,12 +2188,51 @@ def status_view():
         except Exception as e:
             iface_json = f"(unavailable: {e})"
 
+    # Cleanup result (set when redirected here from /status/remove_unknown).
+    cleanup = None
+    try:
+        if request.args.get("cleanup") == "1":
+            cleanup = {
+                "scanned": int(request.args.get("scanned", "0") or 0),
+                "removed": int(request.args.get("removed", "0") or 0),
+                "failed": int(request.args.get("failed", "0") or 0),
+                "skipped": int(request.args.get("skipped", "0") or 0),
+            }
+    except Exception:
+        cleanup = None
+
     return render_template(
         "status.html", host=HOST, extra_head="",
         connected=connected, local=local,
         live_node_json=live_node_json,
         iface_json=iface_json,
+        cleanup=cleanup,
+        unknown_auto_age_hours=UNKNOWN_NODE_AUTO_CLEAN_AGE_SEC // 3600,
     )
+
+
+@app.post("/status/remove_unknown", endpoint="status_remove_unknown")
+def status_remove_unknown():
+    """Manual cleanup: remove all nodes with no long/short name from the
+    device's NodeDB and the gateway's DB. No age filter — the user clicked
+    the button knowing what they're doing."""
+    try:
+        res = remove_unknown_nodes(min_age_seconds=None)
+    except Exception as e:
+        try:
+            debug_add({"ts": iso_now(), "type": "admin",
+                       "note": f"manual cleanup error: {e}"})
+        except Exception:
+            pass
+        res = {"scanned": 0, "removed": 0, "failed": 0, "skipped": 0}
+    qs = (
+        f"cleanup=1"
+        f"&scanned={int(res.get('scanned', 0))}"
+        f"&removed={int(res.get('removed', 0))}"
+        f"&failed={int(res.get('failed', 0))}"
+        f"&skipped={int(res.get('skipped', 0))}"
+    )
+    return redirect(url_for("status_view") + "?" + qs)
 
 
 # -------------------------
@@ -2065,6 +2246,7 @@ def start_gateway_thread() -> threading.Thread:
 
 if __name__ == "__main__":
     gw_thread = start_gateway_thread()
+    cleanup_thread = start_unknown_cleanup_thread()
     try:
         app.run(host=WEB_HOST, port=WEB_PORT, debug=False, use_reloader=False, threaded=True)
     finally:

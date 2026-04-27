@@ -87,6 +87,7 @@
 
       function popupHtml(n) {
         const lat = n.lat, lon = n.lon;
+        const hopsStr = (n.hops != null) ? `${n.hops}` : "—";
         return `
           <div style="min-width: 220px">
             <div><b>${n.name}</b> <span class="mono" style="color:#666">${n.node_id}</span></div>
@@ -96,6 +97,7 @@
             <div><b>Pos time:</b> ${n.pos_time || ""}</div>
             <div><b>RSSI/SNR:</b> ${n.rssi ?? ""} / ${n.snr ?? ""}</div>
             <div><b>Lat/Lon:</b> ${lat.toFixed(5)}, ${lon.toFixed(5)}</div>
+            <div><b>Hops:</b> ${hopsStr}</div>
           </div>
         `;
       }
@@ -109,11 +111,12 @@
 
           const checked = selectedTracks.has(n.node_id) ? "checked" : "";
           const distStr = (n.distance_km != null) ? ` · ${Number(n.distance_km).toFixed(1)} km` : "";
+          const hopsStr = (n.hops != null) ? ` · Hops ${n.hops}` : "";
           item.innerHTML = `
             <div class="d-flex justify-content-between align-items-start gap-2">
               <div>
                 <div><b>${n.name}</b></div>
-                <div class="small text-muted mono">${n.node_id}</div>
+                <div class="small text-muted mono">${n.node_id}${hopsStr}</div>
                 <div class="small text-muted mono">RSSI ${n.rssi ?? ""} · SNR ${n.snr ?? ""}${distStr}</div>
               </div>
               <div class="text-end">
@@ -202,7 +205,6 @@
         timer = setInterval(refreshMarkersAndList, rateMs);
       }
       document.getElementById("mapRate").addEventListener("change", setTimer);
-      document.getElementById("trackN").addEventListener("change", refreshTracks);
       document.getElementById("clearTracksBtn").addEventListener("click", () => {
         selectedTracks = new Set();
         refreshTracks();

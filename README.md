@@ -59,7 +59,7 @@ The gateway performs lightweight schema migrations automatically on startup, so 
 - **Broadcast** — chat-style view of broadcast traffic. A channel selector at the top lets you view any of the channels configured on your Meshtastic device, and you can broadcast a message to the currently selected channel from the same page. Broadcast traffic is kept separate from Inbox/Outbox.
 - **Map** — last known positions of all heard nodes. Filled circles show node location (green = recent, blue = older); the side list shows hop count and distance per node, and clicking a node opens a popup with full details including hop count. Optional per-node track lines, configurable last *N* points. The map automatically uses light or dark tiles depending on the theme setting.
 - **Debug** — terminal-style view of raw JSON packets, with pause/copy/filter controls.
-- **Status** — best-effort live node info from the interface plus the gateway's own connection state.
+- **Status** — best-effort live node info from the interface plus the gateway's own connection state, and a *Maintenance* card with a button to remove "unknown" nodes (no name received) on demand.
 - **Services** — enable/disable services (currently METAR), configure reply delay, and see the latest service-traffic log.
 - **Send** — per-node chat / send-message view (direct messages), with ACK feedback.
 
@@ -234,7 +234,18 @@ Chat-style view of broadcast traffic. Use the channel selector at the top of the
 
 ### Status
 
-Basic status of the gateway and the Meshtastic device it's connected to (connection state, local node summary, best-effort live node info).
+Basic status of the gateway and the Meshtastic device it's connected to (connection state, local node summary, best-effort live node info), plus a *Maintenance* card.
+
+#### Maintenance — Remove unknown nodes
+
+Meshtastic radios can pick up the *node number* of a remote node from any packet, but the human-readable name and hardware information only arrive with that node's *NodeInfo* broadcast. If the gateway hears traffic from a distant node but never receives its NodeInfo, the entry sits in the Active Nodes list with no name (the Android app shows it as "unknown"). These can accumulate over time and are usually not actionable.
+
+The Status page has two cleanup mechanisms:
+
+- **Automatic.** A background task in the gateway scans the database periodically (every 30 minutes) and removes any unknown node — defined as having no `long_name` and no `short_name` — that hasn't been heard for at least **24 hours**. Removal sends an admin command to the connected device telling it to drop the node from its NodeDB, and also clears the row from the gateway's SQLite. The library's in-memory node cache is evicted at the same time so the entry doesn't reappear on the next refresh cycle.
+- **Manual button.** *Remove unknown nodes now* on the Status page runs the same cleanup immediately and without the 24-hour age filter, for when you want a clean slate before the timer fires. The result of the last manual run (scanned / removed / skipped / failed counts) is shown above the button. The gateway's own node is always skipped.
+
+A removed unknown node can come back if it transmits again and the device re-learns it from a packet — that is normal and matches the Android app's behavior. There is no "ignore forever" in the standard Meshtastic admin API.
 
 ### Services
 

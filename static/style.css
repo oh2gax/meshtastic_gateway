@@ -7,3 +7,16 @@ body { padding-top: 20px; }
     .nodeitem:hover { background: #f6f8ff; }
     .chip { display:inline-block; padding: 2px 8px; border-radius: 999px; background: #eef2ff; }
     .dim { color: #6c757d; }
+
+    /* ---------- Dark theme overrides ---------- */
+    /* Bootstrap 5.3 handles buttons / cards / tables / alerts / forms automatically
+       via [data-bs-theme="dark"]. These rules cover the project's custom classes. */
+    [data-bs-theme="dark"] .nodeitem:hover { background: #1f2633; }
+    [data-bs-theme="dark"] .chip { background: #1c2436; color: #cfd7ea; }
+    [data-bs-theme="dark"] .dim { color: #9aa3ad; }
+    /* Map container border is set inline in map.html; soften it for dark mode. */
+    [data-bs-theme="dark"] #map { border-color: #2a2f36 !important; }
+    /* Leaflet popups use their own white background; keep them readable. */
+    [data-bs-theme="dark"] .leaflet-popup-content-wrapper,
+    [data-bs-theme="dark"] .leaflet-popup-tip { background: #1b2028; color: #e6e9ef; }
+    [data-bs-theme="dark"] .leaflet-container a { color: #8ab4f8; }

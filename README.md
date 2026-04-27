@@ -55,7 +55,7 @@ The gateway performs lightweight schema migrations automatically on startup, so 
 
 - **Inbox** — received direct messages, with unread highlighting and per-message *Mark read* / *Delete* buttons (see *New message notifications* below).
 - **Outbox** — sent direct messages and send queue status, including ACK status per outgoing message.
-- **Active Nodes** — list of heard nodes, selectable time windows.
+- **Active Nodes** — list of heard nodes with selectable time windows, including a *Pos* indicator (`Y` if a position is known, otherwise `—`) and a *Hops* column showing how many hops away each node is (`0` = direct neighbor, `—` = unknown).
 - **Broadcast** — chat-style view of broadcast traffic. A channel selector at the top lets you view any of the channels configured on your Meshtastic device, and you can broadcast a message to the currently selected channel from the same page. Broadcast traffic is kept separate from Inbox/Outbox.
 - **Map** — last known positions of all heard nodes. Filled circles show node location (green = recent, blue = older). Optional per-node track lines, configurable last *N* points. The map automatically uses light or dark tiles depending on the theme setting.
 - **Debug** — terminal-style view of raw JSON packets, with pause/copy/filter controls.
@@ -205,7 +205,12 @@ Each entry has a *Delete* button to remove it from the queue / log.
 
 ### Active Nodes
 
-All heard nodes with timestamp, RSSI/SNR and position information. Filtered by a selectable time window.
+All heard nodes with timestamp, RSSI/SNR and other per-node info, filtered by a selectable time window. Two compact columns at the right of the table summarize the radio path:
+
+- **Pos** — `Y` if the node has shared a position (which you'll then see on the *Map* page), `—` otherwise. Lat/lon values themselves are intentionally not shown here; the Map page is the right place to look at coordinates.
+- **Hops** — how many hops the most recent packet from this node travelled to reach the gateway. `0` means a direct neighbor (heard on-air with no relay); `1`, `2`, … indicate the number of relays involved. `—` means the hop information was not available in the packets seen so far (e.g. older firmware or packet types that don't carry it).
+
+The Hops value reflects the most recent packet from each node. If a relay path changes, the value updates the next time we hear from that node.
 
 ### Broadcast messages
 

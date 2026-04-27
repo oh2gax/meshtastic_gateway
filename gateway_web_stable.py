@@ -969,7 +969,8 @@ def list_nodes_with_position(conn: sqlite3.Connection, window_seconds: int) -> L
         cur.execute("""
         SELECT node_id, long_name, short_name, hw_model,
                last_seen_iso, last_rssi, last_snr,
-               last_lat, last_lon, last_alt, last_pos_iso, last_seen_ts
+               last_lat, last_lon, last_alt, last_pos_iso, last_seen_ts,
+               last_hops
         FROM nodes
         WHERE last_lat IS NOT NULL AND last_lon IS NOT NULL
           AND last_seen_ts IS NOT NULL AND last_seen_ts >= ?
@@ -1896,6 +1897,7 @@ def map_data():
             "age_sec": age_sec,
             "recent": recent,
             "distance_km": dist_km,
+            "hops": r["last_hops"],
         })
     return jsonify({"nodes": nodes})
 

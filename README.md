@@ -57,7 +57,7 @@ The gateway performs lightweight schema migrations automatically on startup, so 
 - **Outbox** — sent direct messages and send queue status, including ACK status per outgoing message.
 - **Active Nodes** — list of heard nodes with selectable time windows, including a *Pos* indicator (`Y` if a position is known, otherwise `—`) and a *Hops* column showing how many hops away each node is (`0` = direct neighbor, `—` = unknown).
 - **Broadcast** — chat-style view of broadcast traffic. A channel selector at the top lets you view any of the channels configured on your Meshtastic device, and you can broadcast a message to the currently selected channel from the same page. Broadcast traffic is kept separate from Inbox/Outbox.
-- **Map** — last known positions of all heard nodes. Filled circles show node location (green = recent, blue = older). Optional per-node track lines, configurable last *N* points. The map automatically uses light or dark tiles depending on the theme setting.
+- **Map** — last known positions of all heard nodes. Filled circles show node location (green = recent, blue = older); the side list shows hop count and distance per node, and clicking a node opens a popup with full details including hop count. Optional per-node track lines, configurable last *N* points. The map automatically uses light or dark tiles depending on the theme setting.
 - **Debug** — terminal-style view of raw JSON packets, with pause/copy/filter controls.
 - **Status** — best-effort live node info from the interface plus the gateway's own connection state.
 - **Services** — enable/disable services (currently METAR), configure reply delay, and see the latest service-traffic log.
@@ -222,8 +222,8 @@ Chat-style view of broadcast traffic. Use the channel selector at the top of the
 - Each node is rendered as a filled circle:
   - **Green** — node was heard recently (within ~15 minutes).
   - **Blue** — node was heard earlier than that.
-- Clicking a circle (or a node entry in the side list) shows details: name, hardware, last-seen time, RSSI/SNR, distance, and coordinates.
-- The side list shows each node's RSSI/SNR and the **distance from the gateway** (great-circle, in km).
+- Clicking a circle (or a node entry in the side list) opens a popup with the node's name, hardware, last-seen time, position time, RSSI/SNR, lat/lon, and **hop count** (`0` = direct neighbor, `—` if unknown).
+- The side list shows each node's device id with hop count appended (e.g. `!0ac9a768 · Hops 2`), plus its RSSI/SNR and the **distance from the gateway** (great-circle, in km). The hop suffix is omitted when no hop data is available yet, so the line stays uncluttered for nodes we haven't fully observed.
 - Track lines can be enabled per node. Track length is configurable via the *Track points* setting on the page (default 60).
 - The map switches between standard OSM tiles and a dark CARTO basemap automatically when you toggle the global Theme button.
 

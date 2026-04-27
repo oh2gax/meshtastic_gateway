@@ -436,7 +436,8 @@ def init_db(conn: sqlite3.Connection) -> None:
             last_lon REAL,
             last_alt REAL,
             last_pos_ts INTEGER,
-            last_pos_iso TEXT
+            last_pos_iso TEXT,
+            last_hops INTEGER
         );
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_nodes_last_seen ON nodes(last_seen_ts);")
@@ -470,6 +471,7 @@ def init_db(conn: sqlite3.Connection) -> None:
             ("last_alt", "REAL"),
             ("last_pos_ts", "INTEGER"),
             ("last_pos_iso", "TEXT"),
+            ("last_hops", "INTEGER"),
         ]:
             if not _col_exists(cur, "nodes", col):
                 try:
@@ -626,7 +628,8 @@ def upsert_node(conn: sqlite3.Connection,
                 lat: Optional[float] = None,
                 lon: Optional[float] = None,
                 alt: Optional[float] = None,
-                pos_ts: Optional[int] = None) -> None:
+                pos_ts: Optional[int] = None,
+                last_hops: Optional[int] = None) -> None:
     if not node_id:
         return
 
@@ -642,8 +645,9 @@ def upsert_node(conn: sqlite3.Connection,
         cur.execute("""
         INSERT INTO nodes(node_id, node_num, long_name, short_name, hw_model, macaddr,
                           last_seen_ts, last_seen_iso, last_rssi, last_snr,
-                          last_lat, last_lon, last_alt, last_pos_ts, last_pos_iso)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                          last_lat, last_lon, last_alt, last_pos_ts, last_pos_iso,
+                          last_hops)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(node_id) DO UPDATE SET
             node_num = COALESCE(excluded.node_num, nodes.node_num),
             long_name = COALESCE(excluded.long_name, nodes.long_name),
@@ -678,10 +682,12 @@ last_pos_iso = CASE
     WHEN nodes.last_pos_ts IS NULL THEN excluded.last_pos_iso
     WHEN excluded.last_pos_ts > nodes.last_pos_ts THEN excluded.last_pos_iso
     ELSE nodes.last_pos_iso
-END
+END,
+            last_hops = COALESCE(excluded.last_hops, nodes.last_hops)
         """, (node_id, node_num, long_name, short_name, hw_model, macaddr,
               seen_ts, seen_iso, last_rssi, last_snr,
-              lat, lon, alt, pos_ts, pos_iso))
+              lat, lon, alt, pos_ts, pos_iso,
+              last_hops))
         conn.commit()
 
 def insert_position(conn: sqlite3.Connection, node_id: str, ts: int, lat: float, lon: float,
@@ -947,7 +953,8 @@ def list_active_nodes(conn: sqlite3.Connection, window_seconds: int) -> List[sql
         cur.execute("""
         SELECT node_id, node_num, long_name, short_name, hw_model, macaddr,
                last_seen_ts, last_seen_iso, last_rssi, last_snr,
-               last_lat, last_lon, last_alt, last_pos_ts, last_pos_iso
+               last_lat, last_lon, last_alt, last_pos_ts, last_pos_iso,
+               last_hops
         FROM nodes
         WHERE last_seen_ts IS NOT NULL AND last_seen_ts >= ?
         ORDER BY last_seen_ts DESC
@@ -1403,6 +1410,18 @@ class Gateway:
             if from_id is None:
                 return
             pos = parse_position_from_packet(packet)
+            # Hops travelled = hopStart - hopLimit (only when both present and consistent).
+            hop_start_v = packet.get("hopStart")
+            hop_limit_v = packet.get("hopLimit")
+            hops_v = None
+            try:
+                if hop_start_v is not None and hop_limit_v is not None:
+                    hs = int(hop_start_v)
+                    hl = int(hop_limit_v)
+                    if hs >= hl >= 0:
+                        hops_v = hs - hl
+            except Exception:
+                hops_v = None
             upsert_node(
                 self.db,
                 node_id=from_id or "",
@@ -1414,6 +1433,7 @@ class Gateway:
                 lon=pos["lon"] if pos else None,
                 alt=pos.get("alt") if pos else None,
                 pos_ts=int(pos.get("time")) if pos and pos.get("time") else None,
+                last_hops=hops_v,
             )
 
             if pos:

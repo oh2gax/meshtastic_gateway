@@ -49,10 +49,35 @@
 
     <script>
       const map = L.map('map').setView([{{ center_lat }}, {{ center_lon }}], {{ 12 if rows|length else 10 }});
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+
+      // Theme-aware tile layers: standard OSM for light, CARTO Dark Matter for dark.
+      const lightTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(map);
+      });
+      const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19,
+        subdomains: 'abcd',
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+      });
+
+      function applyThemeTiles() {
+        const dark = (document.documentElement.getAttribute('data-bs-theme') === 'dark');
+        if (dark) {
+          if (map.hasLayer(lightTiles)) map.removeLayer(lightTiles);
+          if (!map.hasLayer(darkTiles)) darkTiles.addTo(map);
+        } else {
+          if (map.hasLayer(darkTiles)) map.removeLayer(darkTiles);
+          if (!map.hasLayer(lightTiles)) lightTiles.addTo(map);
+        }
+      }
+      applyThemeTiles();
+
+      // Swap tiles live when the Theme button toggles data-bs-theme.
+      new MutationObserver(applyThemeTiles).observe(
+        document.documentElement,
+        { attributes: true, attributeFilter: ['data-bs-theme'] }
+      );
 
       const markerLayer = L.layerGroup().addTo(map);
       const trackLayer = L.layerGroup().addTo(map);
@@ -83,12 +108,13 @@
           item.className = "p-2 rounded nodeitem";
 
           const checked = selectedTracks.has(n.node_id) ? "checked" : "";
+          const distStr = (n.distance_km != null) ? ` · ${Number(n.distance_km).toFixed(1)} km` : "";
           item.innerHTML = `
             <div class="d-flex justify-content-between align-items-start gap-2">
               <div>
                 <div><b>${n.name}</b></div>
                 <div class="small text-muted mono">${n.node_id}</div>
-                <div class="small text-muted mono">RSSI ${n.rssi ?? ""} · SNR ${n.snr ?? ""}</div>
+                <div class="small text-muted mono">RSSI ${n.rssi ?? ""} · SNR ${n.snr ?? ""}${distStr}</div>
               </div>
               <div class="text-end">
                 <label class="small text-muted">
@@ -129,12 +155,22 @@
 
         markerLayer.clearLayers();
         for (const n of data.nodes) {
+          const fill   = n.recent ? "#22c55e" : "#3b82f6";
+          const stroke = n.recent ? "#15803d" : "#1d4ed8";
           let m = markers.get(n.node_id);
           if (!m) {
-            m = L.marker([n.lat, n.lon]);
+            m = L.circleMarker([n.lat, n.lon], {
+              radius: 8,
+              fillColor: fill,
+              color: stroke,
+              weight: 2,
+              opacity: 1,
+              fillOpacity: 0.85
+            });
             markers.set(n.node_id, m);
           } else {
             m.setLatLng([n.lat, n.lon]);
+            m.setStyle({ fillColor: fill, color: stroke });
           }
           m.bindPopup(popupHtml(n));
           m.addTo(markerLayer);
@@ -165,7 +201,6 @@
         const rateMs = parseInt(document.getElementById("mapRate").value || "5", 10) * 1000;
         timer = setInterval(refreshMarkersAndList, rateMs);
       }
-
       document.getElementById("mapRate").addEventListener("change", setTimer);
       document.getElementById("trackN").addEventListener("change", refreshTracks);
       document.getElementById("clearTracksBtn").addEventListener("click", () => {

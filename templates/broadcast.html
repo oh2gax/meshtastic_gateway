@@ -3,18 +3,29 @@
 
 {% endblock %}
 {% block body %}
-<div class="d-flex justify-content-between align-items-center mb-2">
-      <h5 class="m-0">Broadcast <span class="chip mono">last={{limit}}</span></h5>
-      <div class="smallish">
-        <a href="{{ url_for('broadcast', limit=50) }}">50</a> |
-        <a href="{{ url_for('broadcast', limit=100) }}">100</a> |
-        <a href="{{ url_for('broadcast', limit=500) }}">500</a>
+<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+      <h5 class="m-0">Broadcast <span class="chip mono">{{ selected_label }}</span> <span class="chip mono">last={{limit}}</span></h5>
+      <div class="d-flex gap-2 align-items-center flex-wrap">
+        <form method="get" action="{{ url_for('broadcast') }}" class="d-flex align-items-center gap-1 m-0">
+          <label class="small text-muted m-0">Channel</label>
+          <select class="form-select form-select-sm" name="channel" onchange="this.form.submit()" style="min-width: 160px;">
+            {% for c in channels %}
+              <option value="{{ c.index }}" {% if c.index == selected_channel %}selected{% endif %}>{{ c.label }}</option>
+            {% endfor %}
+          </select>
+          <input type="hidden" name="limit" value="{{ limit }}">
+        </form>
+        <div class="smallish">
+          <a href="{{ url_for('broadcast', limit=50, channel=selected_channel) }}">50</a> |
+          <a href="{{ url_for('broadcast', limit=100, channel=selected_channel) }}">100</a> |
+          <a href="{{ url_for('broadcast', limit=500, channel=selected_channel) }}">500</a>
+        </div>
       </div>
     </div>
 
     {% if queued %}
       <div class="alert alert-warning py-2">
-        <b>Queued broadcast messages:</b>
+        <b>Queued broadcast messages on {{ selected_label }}:</b>
         <ul class="mb-0">
           {% for q in queued %}
             <li class="mono">#{{ q["id"] }} · {{ q["created_ts_iso"] }} · {{ q["text"] }}</li>
@@ -42,19 +53,20 @@
           </div>
         {% endfor %}
         {% if not msgs %}
-          <div class="text-muted">No broadcast messages yet.</div>
+          <div class="text-muted">No broadcast messages on this channel yet.</div>
         {% endif %}
       </div>
     </div>
 
     <form method="post" action="{{ url_for('broadcast_send') }}" class="card card-body">
+      <input type="hidden" name="channel" value="{{ selected_channel }}">
       <div class="mb-2">
-        <label class="form-label">Send broadcast</label>
+        <label class="form-label">Send broadcast on <b>{{ selected_label }}</b></label>
         <textarea class="form-control" name="text" rows="2" maxlength="240" required></textarea>
       </div>
       <button class="btn btn-primary" type="submit">Queue broadcast</button>
     </form>
-    
+
 
 <script>
 (function(){

@@ -8,7 +8,7 @@
       <div class="mb-3">
         <label class="form-label">Destination</label>
         <select class="form-select" name="to_id">
-          <option value="" {{ "selected" if not to_id_prefill else "" }}>BROADCAST (primary channel)</option>
+          <option value="" {{ "selected" if not to_id_prefill else "" }}>BROADCAST (pick channel below)</option>
           {% for r in rows %}
             <option value="{{ r['node_id'] }}" {{ "selected" if r['node_id']==to_id_prefill else "" }}>
               {{ node_display(r["long_name"], r["short_name"], r["node_id"]) }} — {{ r['node_id'] }} [RSSI {{ r['last_rssi'] }}, SNR {{ r['last_snr'] }}]
@@ -16,6 +16,16 @@
           {% endfor %}
         </select>
         <div class="form-text">Dropdown uses nodes heard in window={{window}}.</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Broadcast channel</label>
+        <select class="form-select" name="channel">
+          {% for c in channels %}
+            <option value="{{ c.index }}" {% if c.index == selected_channel %}selected{% endif %}>{{ c.label }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Only used when the destination is BROADCAST. Ignored for direct messages.</div>
       </div>
 
       <div class="mb-3">

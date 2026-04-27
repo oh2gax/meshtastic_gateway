@@ -1,14 +1,29 @@
 {% extends "base.html" %}
 {% block extra_head %}
-
+<style>
+  /* Highlight unread rows. Works in both light and dark themes. */
+  tr.unread-row > td { font-weight: 600; }
+  [data-bs-theme="light"] tr.unread-row > td { background-color: #fff3cd !important; }
+  [data-bs-theme="dark"]  tr.unread-row > td { background-color: #3a2e0a !important; }
+  .unread-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: #dc3545; margin-right: 6px; vertical-align: middle;
+  }
+</style>
 {% endblock %}
 {% block body %}
 <div class="d-flex justify-content-between align-items-center mb-2">
       <h5 class="m-0">Inbox (latest {{limit}})</h5>
-      <div class="smallish">
-        <a href="{{ url_for('inbox', limit=50) }}">50</a> |
-        <a href="{{ url_for('inbox', limit=200) }}">200</a> |
-        <a href="{{ url_for('inbox', limit=1000) }}">1000</a>
+      <div class="d-flex align-items-center gap-2 smallish">
+        <form method="post" action="{{ url_for('inbox_mark_all_read') }}" class="m-0">
+          <button class="btn btn-sm btn-outline-secondary" type="submit"
+                  title="Mark all messages as read">Mark all read</button>
+        </form>
+        <div>
+          <a href="{{ url_for('inbox', limit=50) }}">50</a> |
+          <a href="{{ url_for('inbox', limit=200) }}">200</a> |
+          <a href="{{ url_for('inbox', limit=1000) }}">1000</a>
+        </div>
       </div>
     </div>
     <div class="table-responsive">
@@ -18,8 +33,12 @@
       </tr></thead>
       <tbody>
       {% for r in rows %}
-        <tr>
-          <td class="mono">{{ r["ts_iso"] }}</td>
+        {% set unread = (r["is_read"] == 0) %}
+        <tr {% if unread %}class="unread-row"{% endif %}>
+          <td class="mono">
+            {% if unread %}<span class="unread-dot" title="Unread"></span>{% endif %}
+            {{ r["ts_iso"] }}
+          </td>
           <td>
             <div>{{ node_display(r["from_long"], r["from_short"], r["from_id"]) }}</div>
             <div class="small dim mono">{{ r["from_id"] }}</div>
@@ -32,9 +51,16 @@
           <td class="mono">{{ r["rx_rssi"] }}</td>
           <td class="mono">{{ r["rx_snr"] }}</td>
           <td class="text-end">
-            <form method="post" action="{{ url_for('message_delete', msg_id=r['id']) }}" onsubmit="return confirm('Delete this message?');">
-              <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
-            </form>
+            <div class="d-flex flex-column gap-1 align-items-end">
+              {% if unread %}
+                <form method="post" action="{{ url_for('message_mark_read', msg_id=r['id']) }}" class="m-0">
+                  <button class="btn btn-sm btn-outline-success" type="submit">Mark read</button>
+                </form>
+              {% endif %}
+              <form method="post" action="{{ url_for('message_delete', msg_id=r['id']) }}" onsubmit="return confirm('Delete this message?');" class="m-0">
+                <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+              </form>
+            </div>
           </td>
         </tr>
       {% endfor %}

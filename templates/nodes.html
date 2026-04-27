@@ -20,7 +20,10 @@
     <div class="table-responsive">
     <table class="table table-sm table-striped align-middle">
       <thead><tr>
-        <th>Last seen</th><th>Node</th><th>Name</th><th>HW</th><th>RSSI</th><th>SNR</th><th>Pos</th><th></th>
+        <th>Last seen</th><th>Node</th><th>Name</th><th>HW</th><th>RSSI</th><th>SNR</th>
+        <th title="Position known?">Pos</th>
+        <th title="Hops travelled (0 = direct neighbor)">Hops</th>
+        <th></th>
       </tr></thead>
       <tbody>
       {% for r in rows %}
@@ -32,11 +35,10 @@
           <td class="mono">{{ r["last_rssi"] }}</td>
           <td class="mono">{{ r["last_snr"] }}</td>
           <td class="mono">
-            {% if r["last_lat"] and r["last_lon"] %}
-              {{ "%.5f"|format(r["last_lat"]) }}, {{ "%.5f"|format(r["last_lon"]) }}
-            {% else %}
-              —
-            {% endif %}
+            {% if r["last_lat"] is not none and r["last_lon"] is not none %}Y{% else %}—{% endif %}
+          </td>
+          <td class="mono">
+            {% if r["last_hops"] is not none %}{{ r["last_hops"] }}{% else %}—{% endif %}
           </td>
           <td class="text-end small">
             <a href="{{ url_for('chat_with', node_id=r['node_id']) }}">Chat</a> ·

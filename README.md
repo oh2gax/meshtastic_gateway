@@ -2,10 +2,11 @@
 
 Web-based Meshtastic messaging, mapping & debugging application.
 
-
-<p align="center">
+<p align="left">
   <img src="Main_Screen_1.png" alt="Meshtastic Gateway main screen" width="700">
 </p>
+
+
 # Meshtastic WiFi Gateway + Web UI (Flask + SQLite)
 
 This project runs on a Raspberry Pi (or any Linux host) and connects to a Meshtastic node over WiFi (TCP) using the Meshtastic Python library. It stores messages and node information in SQLite, and provides a lightweight Flask web UI for viewing and sending messages, monitoring active nodes, viewing positions on a map, and inspecting raw packets.

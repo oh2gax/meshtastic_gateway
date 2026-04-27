@@ -5,15 +5,12 @@
 {% block body %}
 <div class="d-flex justify-content-between align-items-center mb-2">
       <h5 class="m-0">Active nodes <span class="chip mono">window={{window}}</span></h5>
-      <div class="d-flex gap-2 align-items-center">
-        <div class="smallish">
-          <a href="{{ url_for('nodes', window='2h') }}">2h</a> |
-          <a href="{{ url_for('nodes', window='6h') }}">6h</a> |
-          <a href="{{ url_for('nodes', window='1d') }}">1d</a> |
-          <a href="{{ url_for('nodes', window='1w') }}">1w</a> |
-          <a href="{{ url_for('nodes', window='1m') }}">1m</a>
-        </div>
-        <a class="btn btn-sm btn-primary" href="{{ url_for('send_form') }}">Send</a>
+      <div class="smallish">
+        <a href="{{ url_for('nodes', window='2h') }}">2h</a> |
+        <a href="{{ url_for('nodes', window='6h') }}">6h</a> |
+        <a href="{{ url_for('nodes', window='1d') }}">1d</a> |
+        <a href="{{ url_for('nodes', window='1w') }}">1w</a> |
+        <a href="{{ url_for('nodes', window='1m') }}">1m</a>
       </div>
     </div>
 

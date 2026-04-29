@@ -995,6 +995,20 @@ def find_unknown_node_rows(conn: sqlite3.Connection,
         return cur.fetchall()
 
 
+def list_all_nodes_for_picker(conn: sqlite3.Connection) -> List[sqlite3.Row]:
+    """Return every node row, most recently seen first, suitable for a
+    UI dropdown. Includes id, num, names and last-seen for display."""
+    conn.row_factory = sqlite3.Row
+    with DB_LOCK:
+        cur = conn.cursor()
+        cur.execute("""
+        SELECT node_id, node_num, long_name, short_name, last_seen_iso, last_seen_ts
+        FROM nodes
+        ORDER BY last_seen_ts DESC NULLS LAST
+        """)
+        return cur.fetchall()
+
+
 def remove_node_from_device(node_num: Optional[int],
                             node_id: Optional[str] = None) -> Tuple[bool, str]:
     """Send an admin command to the local Meshtastic device asking it to
@@ -2201,12 +2215,33 @@ def status_view():
     except Exception:
         cleanup = None
 
+    # Manual-remove result (set when redirected here from /status/remove_node).
+    manual_remove = None
+    try:
+        if request.args.get("manual_remove") == "1":
+            manual_remove = {
+                "node_id": request.args.get("node_id", "") or "",
+                "ok": (request.args.get("ok") == "1"),
+                "msg": request.args.get("msg", "") or "",
+            }
+    except Exception:
+        manual_remove = None
+
+    # Full node list for the picker dropdown.
+    try:
+        all_nodes = list_all_nodes_for_picker(DB_CONN)
+    except Exception:
+        all_nodes = []
+
     return render_template(
         "status.html", host=HOST, extra_head="",
         connected=connected, local=local,
         live_node_json=live_node_json,
         iface_json=iface_json,
         cleanup=cleanup,
+        manual_remove=manual_remove,
+        all_nodes=all_nodes,
+        my_id=(gateway.my_id or ""),
         unknown_auto_age_hours=UNKNOWN_NODE_AUTO_CLEAN_AGE_SEC // 3600,
     )
 
@@ -2231,6 +2266,56 @@ def status_remove_unknown():
         f"&removed={int(res.get('removed', 0))}"
         f"&failed={int(res.get('failed', 0))}"
         f"&skipped={int(res.get('skipped', 0))}"
+    )
+    return redirect(url_for("status_view") + "?" + qs)
+
+
+@app.post("/status/remove_node", endpoint="status_remove_node")
+def status_remove_node():
+    """Remove a single, specific node chosen from the Status-page dropdown.
+    Refuses to remove the gateway's own node."""
+    node_id = (request.form.get("node_id", "") or "").strip()
+    ok = False
+    msg = ""
+    try:
+        if not node_id:
+            msg = "no node selected"
+        elif gateway.my_id and str(node_id) == str(gateway.my_id):
+            msg = "refusing to remove this gateway's own node"
+        else:
+            # Look up node_num for the admin command.
+            DB_CONN.row_factory = sqlite3.Row
+            with DB_LOCK:
+                cur = DB_CONN.cursor()
+                cur.execute("SELECT node_num FROM nodes WHERE node_id = ? LIMIT 1",
+                            (node_id,))
+                row = cur.fetchone()
+            node_num = int(row["node_num"]) if row and row["node_num"] is not None else None
+            ok_dev, err = remove_node_from_device(node_num, node_id=node_id)
+            # Always remove from gateway DB so the UI clears, even if the
+            # device-side admin call failed (e.g. node already gone there).
+            try:
+                delete_node_from_db(DB_CONN, node_id)
+            except Exception as e:
+                msg = f"db delete failed: {e}"
+            if ok_dev:
+                ok = True
+                if not msg:
+                    msg = "removed"
+            else:
+                msg = msg or f"device removal failed: {err or 'unknown'}"
+            try:
+                debug_add({"ts": iso_now(), "type": "admin",
+                           "note": f"manual remove {node_id}: dev_ok={ok_dev} msg='{msg}'"})
+            except Exception:
+                pass
+    except Exception as e:
+        msg = f"error: {e}"
+    qs = (
+        "manual_remove=1"
+        f"&node_id={node_id}"
+        f"&ok={'1' if ok else '0'}"
+        f"&msg={msg.replace(' ', '+')}"
     )
     return redirect(url_for("status_view") + "?" + qs)
 

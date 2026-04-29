@@ -59,7 +59,7 @@ The gateway performs lightweight schema migrations automatically on startup, so 
 - **Broadcast** — chat-style view of broadcast traffic. A channel selector at the top lets you view any of the channels configured on your Meshtastic device, and you can broadcast a message to the currently selected channel from the same page. Broadcast traffic is kept separate from Inbox/Outbox.
 - **Map** — last known positions of all heard nodes. Filled circles show node location (green = recent, blue = older); the side list shows hop count and distance per node, and clicking a node opens a popup with full details including hop count. Optional per-node track lines, configurable last *N* points. The map automatically uses light or dark tiles depending on the theme setting.
 - **Debug** — terminal-style view of raw JSON packets, with pause/copy/filter controls.
-- **Status** — best-effort live node info from the interface plus the gateway's own connection state, and a *Maintenance* card with a button to remove "unknown" nodes (no name received) on demand.
+- **Status** — best-effort live node info from the interface plus the gateway's own connection state, and a *Maintenance* card with controls to remove "unknown" nodes (no name received) on demand and to remove a specific node chosen from a dropdown.
 - **Services** — enable/disable services (currently METAR), configure reply delay, and see the latest service-traffic log.
 - **Send** — per-node chat / send-message view (direct messages), with ACK feedback.
 
@@ -248,6 +248,14 @@ The Status page has two cleanup mechanisms:
 - **Manual button.** *Remove unknown nodes now* on the Status page runs the same cleanup immediately and without the 24-hour age filter, for when you want a clean slate before the timer fires. The result of the last manual run (scanned / removed / skipped / failed counts) is shown above the button. The gateway's own node is always skipped.
 
 A removed unknown node can come back if it transmits again and the device re-learns it from a packet — that is normal and matches the Android app's behavior. There is no "ignore forever" in the standard Meshtastic admin API.
+
+#### Maintenance — Remove specific node
+
+Below the unknown-node controls, the Maintenance card has a *Remove specific node* section for one-off cleanups of a particular node — useful for stale entries that aren't matched by the unknown rule (for example, a node that has full NodeInfo but no longer exists in the device's NodeDB and keeps getting re-added by the gateway from on-air packets).
+
+The dropdown lists every node currently in the gateway's database, sorted with the most recently heard first. Picking one and clicking *Remove selected node* sends the admin `removeNode` command to the connected device, evicts the entry from the library's in-memory cache, and deletes the row from the gateway's SQLite — even if the device-side removal reports nothing was there to remove. The gateway's own node is never offered in the dropdown. A small banner above the dropdown shows the result of the last removal (success / message). All actions are logged to the Debug stream.
+
+This action is also subject to the same caveat as the unknown cleanup: a node that's still actively transmitting on the air can be re-learned from a future packet and reappear. For the typical "stuck" entries, though, removal sticks.
 
 ### Services
 

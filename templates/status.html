@@ -53,6 +53,39 @@
               Remove unknown nodes now
             </button>
           </form>
+
+          <hr class="my-3">
+
+          <div class="small text-muted mb-1">Remove specific node</div>
+          <div class="small mb-2">
+            For one-off cleanup of a particular node. Tells the connected
+            device to remove the node from its NodeDB and clears the row
+            from this gateway. The gateway's own node is never offered.
+          </div>
+          {% if manual_remove %}
+            <div class="alert {{ 'alert-success' if manual_remove.ok else 'alert-warning' }} py-2 px-3 mb-2 small">
+              {{ manual_remove.node_id }} &mdash; {{ manual_remove.msg }}
+            </div>
+          {% endif %}
+          <form method="post" action="{{ url_for('status_remove_node') }}"
+                onsubmit="return confirm('Remove the selected node?');"
+                class="d-flex gap-2 align-items-center m-0 flex-wrap">
+            <select name="node_id" class="form-select form-select-sm" style="max-width: 380px;">
+              <option value="">-- select a node --</option>
+              {% for n in (all_nodes or []) %}
+                {% if n['node_id'] != my_id %}
+                  <option value="{{ n['node_id'] }}">
+                    {{ node_display(n['long_name'], n['short_name'], n['node_id']) }}
+                    &mdash; {{ n['node_id'] }}
+                    {% if n['last_seen_iso'] %}({{ n['last_seen_iso'] }}){% endif %}
+                  </option>
+                {% endif %}
+              {% endfor %}
+            </select>
+            <button class="btn btn-sm btn-outline-danger" type="submit">
+              Remove selected node
+            </button>
+          </form>
         </div></div>
       </div>
     </div>

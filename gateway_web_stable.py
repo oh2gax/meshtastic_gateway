@@ -259,10 +259,20 @@ METAR_BASE_URL = "https://tgftp.nws.noaa.gov/data/observations/metar/stations/{i
 METAR_DELAY_KEY = "metar_delay_sec"
 METAR_ENABLED_KEY = "metar_enabled"
 
+# TAF (Terminal Aerodrome Forecast) — same NOAA TGFTP host, different path.
+TAF_BASE_URL = "https://tgftp.nws.noaa.gov/data/forecasts/taf/stations/{icao}.TXT"
+TAF_MAX_LEN = 220  # truncate to fit a single Meshtastic DM payload comfortably
+
+# Solar / propagation summary from hamqsl.com (XML, free, no auth).
+SOLAR_BASE_URL = "https://www.hamqsl.com/solarxml.php"
+SOLAR_MAX_LEN = 220
+
 # Pattern(s) for messages that the gateway treats as service commands.
 # Service commands are NOT stored in the inbox.
 SERVICE_COMMAND_PATTERNS = (
-    re.compile(r"^\s*wx\s+[A-Za-z]{4}\s*$", re.IGNORECASE),  # METAR: "wx EFHK"
+    re.compile(r"^\s*wx\s+[A-Za-z]{4}\s*$", re.IGNORECASE),   # METAR: "wx EFHK"
+    re.compile(r"^\s*taf\s+[A-Za-z]{4}\s*$", re.IGNORECASE),  # TAF:   "taf EFHK"
+    re.compile(r"^\s*cmd\s+solar\s*$", re.IGNORECASE),        # Solar: "cmd solar"
 )
 
 def is_service_command(text: Optional[str]) -> bool:
@@ -310,6 +320,114 @@ def compact_metar(metar: str, icao: str) -> str:
     if len(s) > 200:
         s = s[:200].rstrip() + "…"
     return s
+
+def fetch_taf_text(icao: str, timeout_sec: int = 8) -> Optional[str]:
+    """Fetch latest TAF for ICAO (e.g. EFHK). Returns the raw TAF body
+    (without the leading 'YYYY/MM/DD HH:MM' timestamp line and with
+    multiline forecasts collapsed to a single line) or None on failure."""
+    icao = (icao or "").strip().upper()
+    if not re.fullmatch(r"[A-Z]{4}", icao):
+        return None
+    url = TAF_BASE_URL.format(icao=icao)
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "MeshtasticGateway/1.0"})
+        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+            data = resp.read().decode("utf-8", errors="replace")
+    except Exception:
+        return None
+
+    lines = [ln.strip() for ln in data.splitlines() if ln.strip()]
+    if not lines:
+        return None
+    # First line is the issue timestamp "YYYY/MM/DD HH:MM"; drop it.
+    if re.match(r"^\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}$", lines[0]):
+        body_lines = lines[1:]
+    else:
+        body_lines = lines
+    if not body_lines:
+        return None
+    # Collapse continuation lines (BECMG/TEMPO blocks etc.) into one line.
+    body = " ".join(part.strip() for part in body_lines if part.strip())
+    body = re.sub(r"\s+", " ", body).strip()
+    return body or None
+
+
+def compact_taf(taf: str, icao: str) -> str:
+    """Strip the 'TAF EFHK' prefix to save bytes (the user already knows
+    the airport from their query) but keep the ddhhmmZ issuance timestamp
+    that follows it. Truncate to TAF_MAX_LEN chars with an ellipsis."""
+    s = (taf or "").strip()
+    if not s:
+        return ""
+    s = re.sub(r"=\s*$", "", s).strip()
+    icao = (icao or "").strip().upper()
+    # Drop a leading "TAF " or "TAF AMD " / "TAF COR ".
+    s = re.sub(r"^TAF(?:\s+(?:AMD|COR))?\s+", "", s, flags=re.IGNORECASE)
+    # Drop the ICAO that immediately follows the keyword.
+    if icao and s.upper().startswith(icao + " "):
+        s = s[len(icao):].lstrip()
+    if len(s) > TAF_MAX_LEN:
+        s = s[:TAF_MAX_LEN].rstrip() + "…"
+    return s
+
+
+def fetch_solar_data(timeout_sec: int = 10) -> Optional[Dict[str, str]]:
+    """Fetch hamqsl solar XML and return a dict of the relevant tag values.
+    Values are stripped of whitespace; tags whose value is "No Report" or
+    empty are omitted. Returns None on transport failure."""
+    try:
+        req = urllib.request.Request(SOLAR_BASE_URL, headers={"User-Agent": "MeshtasticGateway/1.0"})
+        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+            data = resp.read().decode("utf-8", errors="replace")
+    except Exception:
+        return None
+
+    # Tags we care about. The hamqsl XML uses these names verbatim.
+    wanted = (
+        "solarflux", "sunspots", "xray",
+        "aindex", "kindex", "aurora",
+        "magneticfield", "solarwind",
+        "protonflux", "electonflux",
+    )
+    out: Dict[str, str] = {}
+    for tag in wanted:
+        m = re.search(r"<" + tag + r">\s*([^<]+?)\s*</" + tag + r">",
+                      data, flags=re.IGNORECASE)
+        if not m:
+            continue
+        val = m.group(1).strip()
+        if not val or val.lower() == "no report":
+            continue
+        out[tag] = val
+    return out or None
+
+
+def compact_solar(data: Optional[Dict[str, str]]) -> str:
+    """Build a compact one-line propagation summary from hamqsl XML data.
+    Field order (only included when present):
+      SFI SN X A K AU BZE SW Pf Ef"""
+    if not data:
+        return ""
+    parts: List[str] = []
+    def add(label: str, key: str) -> None:
+        v = data.get(key)
+        if v:
+            parts.append(f"{label} {v}")
+    add("SFI", "solarflux")
+    add("SN",  "sunspots")
+    add("X",   "xray")
+    add("A",   "aindex")
+    add("K",   "kindex")
+    add("AU",  "aurora")
+    add("BZE", "magneticfield")
+    add("SW",  "solarwind")
+    add("Pf",  "protonflux")
+    add("Ef",  "electonflux")
+    s = " ".join(parts)
+    if len(s) > SOLAR_MAX_LEN:
+        s = s[:SOLAR_MAX_LEN].rstrip() + "…"
+    return s
+
 
 # Debug buffer
 # -------------------------
@@ -1550,6 +1668,87 @@ class Gateway:
                                                     except Exception as e_q:
                                                         debug_add({'ts': iso_now(), 'fromId': sender_id, 'type': 'svc', 'note': f'metar queue failed: {e_q}'})
                                                         log_service_event(self.db, "metar", sender_id, to_id, icao, "fail", f"queue: {e_q}")
+
+                                # TAF service: respond to direct messages "taf <ICAO>".
+                                # The Services on/off setting (METAR_ENABLED_KEY) and the
+                                # reply delay (METAR_DELAY_KEY) are shared with METAR; this
+                                # is one combined "METAR & TAF" service.
+                                mtaf = re.match(r"^\s*taf\s+([A-Za-z]{4})\s*$", str(text_in), flags=re.IGNORECASE)
+                                if mtaf:
+                                    enabled_t = get_setting(self.db, METAR_ENABLED_KEY, "1")
+                                    taf_enabled = True if enabled_t in ("1", "true", "yes", "on") else False
+                                    if taf_enabled:
+                                        icao = mtaf.group(1).upper()
+                                        to_id = packet.get("toId") or int_to_node_id(packet.get("to"))
+                                        sender_id = packet.get("fromId") or int_to_node_id(packet.get("from"))
+                                        if to_id and sender_id and to_id not in ("^all", "!ffffffff"):
+                                            log_service_event(self.db, "taf", sender_id, to_id, icao, "req", "")
+                                            taf = fetch_taf_text(icao)
+                                            if taf:
+                                                reply_t = compact_taf(taf, icao)
+                                            else:
+                                                reply_t = f"No TAF for {icao}"
+                                            sent_ok_t = False
+                                            if getattr(self, 'iface', None) is not None:
+                                                try:
+                                                    time.sleep(int(get_setting(self.db, METAR_DELAY_KEY, "3") or 3))
+                                                    self.iface.sendText(reply_t, destinationId=sender_id)
+                                                    sent_ok_t = True
+                                                    log_service_event(self.db, "taf", sender_id, to_id, icao, "ok", reply_t)
+                                                except Exception as e_send_t:
+                                                    debug_add({'ts': iso_now(), 'fromId': sender_id, 'type': 'svc', 'note': f'taf sendText failed: {e_send_t}'})
+                                                    log_service_event(self.db, "taf", sender_id, to_id, icao, "fail", f"sendText: {e_send_t}")
+                                            if not sent_ok_t:
+                                                try:
+                                                    ch_t = packet.get('channel')
+                                                    try:
+                                                        ch_i_t = int(ch_t) if ch_t is not None else None
+                                                    except Exception:
+                                                        ch_i_t = None
+                                                    queue_outbox(self.db, sender_id, ch_i_t, reply_t)
+                                                    log_service_event(self.db, "taf", sender_id, to_id, icao, "queued", reply_t)
+                                                except Exception as e_q_t:
+                                                    debug_add({'ts': iso_now(), 'fromId': sender_id, 'type': 'svc', 'note': f'taf queue failed: {e_q_t}'})
+                                                    log_service_event(self.db, "taf", sender_id, to_id, icao, "fail", f"queue: {e_q_t}")
+
+                                # Solar / propagation service: respond to "cmd solar".
+                                # Shares the METAR_ENABLED on/off and reply-delay settings.
+                                msolar = re.match(r"^\s*cmd\s+solar\s*$", str(text_in), flags=re.IGNORECASE)
+                                if msolar:
+                                    enabled_s = get_setting(self.db, METAR_ENABLED_KEY, "1")
+                                    solar_enabled = True if enabled_s in ("1", "true", "yes", "on") else False
+                                    if solar_enabled:
+                                        to_id = packet.get("toId") or int_to_node_id(packet.get("to"))
+                                        sender_id = packet.get("fromId") or int_to_node_id(packet.get("from"))
+                                        if to_id and sender_id and to_id not in ("^all", "!ffffffff"):
+                                            log_service_event(self.db, "solar", sender_id, to_id, "solar", "req", "")
+                                            sdata = fetch_solar_data()
+                                            if sdata:
+                                                reply_s = compact_solar(sdata)
+                                            else:
+                                                reply_s = "Solar data unavailable"
+                                            sent_ok_s = False
+                                            if getattr(self, 'iface', None) is not None:
+                                                try:
+                                                    time.sleep(int(get_setting(self.db, METAR_DELAY_KEY, "3") or 3))
+                                                    self.iface.sendText(reply_s, destinationId=sender_id)
+                                                    sent_ok_s = True
+                                                    log_service_event(self.db, "solar", sender_id, to_id, "solar", "ok", reply_s)
+                                                except Exception as e_send_s:
+                                                    debug_add({'ts': iso_now(), 'fromId': sender_id, 'type': 'svc', 'note': f'solar sendText failed: {e_send_s}'})
+                                                    log_service_event(self.db, "solar", sender_id, to_id, "solar", "fail", f"sendText: {e_send_s}")
+                                            if not sent_ok_s:
+                                                try:
+                                                    ch_s = packet.get('channel')
+                                                    try:
+                                                        ch_i_s = int(ch_s) if ch_s is not None else None
+                                                    except Exception:
+                                                        ch_i_s = None
+                                                    queue_outbox(self.db, sender_id, ch_i_s, reply_s)
+                                                    log_service_event(self.db, "solar", sender_id, to_id, "solar", "queued", reply_s)
+                                                except Exception as e_q_s:
+                                                    debug_add({'ts': iso_now(), 'fromId': sender_id, 'type': 'svc', 'note': f'solar queue failed: {e_q_s}'})
+                                                    log_service_event(self.db, "solar", sender_id, to_id, "solar", "fail", f"queue: {e_q_s}")
                             except Exception as e:
                                 # keep gateway alive but record why it failed
                                 try:
@@ -2090,9 +2289,9 @@ def services_view():
         with DB_LOCK:
             cur = DB_CONN.cursor()
             cur.execute("""
-                SELECT ts_iso, from_id, query, status, note
+                SELECT ts_iso, service, from_id, query, status, note
                 FROM service_log
-                WHERE service = 'metar'
+                WHERE service IN ('metar', 'taf', 'solar')
                 ORDER BY ts DESC LIMIT 50
             """)
             metar_log = cur.fetchall()

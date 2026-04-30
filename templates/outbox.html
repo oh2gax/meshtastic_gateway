@@ -5,10 +5,21 @@
 {% block body %}
 <div class="d-flex justify-content-between align-items-center mb-2">
       <h5 class="m-0">Outbox (latest {{limit}})</h5>
-      <div class="smallish">
-        <a href="{{ url_for('outbox_view', limit=50) }}">50</a> |
-        <a href="{{ url_for('outbox_view', limit=200) }}">200</a> |
-        <a href="{{ url_for('outbox_view', limit=1000) }}">1000</a>
+      <div class="d-flex gap-2 align-items-center smallish">
+        <div>
+          <a href="{{ url_for('outbox_view', limit=50) }}">50</a> |
+          <a href="{{ url_for('outbox_view', limit=200) }}">200</a> |
+          <a href="{{ url_for('outbox_view', limit=1000) }}">1000</a>
+        </div>
+        <div class="text-muted">
+          Refresh:
+          <select id="outboxRefreshRate" class="form-select form-select-sm d-inline-block" style="width: auto;">
+            <option value="0">Off</option>
+            <option value="10" selected>10s</option>
+            <option value="30">30s</option>
+            <option value="60">60s</option>
+          </select>
+        </div>
       </div>
     </div>
     <div class="table-responsive">
@@ -52,4 +63,32 @@
       </tbody>
     </table>
     </div>
+
+    <script>
+      (function () {
+        var sel = document.getElementById('outboxRefreshRate');
+        if (!sel) return;
+        try {
+          var saved = localStorage.getItem('mg-outbox-refresh');
+          if (saved !== null) {
+            for (var i = 0; i < sel.options.length; i++) {
+              if (sel.options[i].value === saved) { sel.value = saved; break; }
+            }
+          }
+        } catch (e) {}
+        var timer = null;
+        function applyRate() {
+          if (timer) { clearInterval(timer); timer = null; }
+          var sec = parseInt(sel.value, 10) || 0;
+          if (sec > 0) {
+            timer = setInterval(function () { location.reload(); }, sec * 1000);
+          }
+        }
+        sel.addEventListener('change', function () {
+          try { localStorage.setItem('mg-outbox-refresh', sel.value); } catch (e) {}
+          applyRate();
+        });
+        applyRate();
+      })();
+    </script>
 {% endblock %}

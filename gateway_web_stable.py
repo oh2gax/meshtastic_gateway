@@ -963,6 +963,23 @@ def update_outbox_ack_by_packet(conn: sqlite3.Connection, packet_id: int, ack_st
         return cur.rowcount or 0
 
 
+def get_outbox_destination_by_packet(conn: sqlite3.Connection,
+                                    packet_id: int) -> Optional[str]:
+    """Return the original to_id for the outbox row matching this packet_id,
+    so we can compare it to the routing reply's fromId and tell apart an
+    explicit destination ACK from an implicit relay ACK."""
+    if packet_id is None:
+        return None
+    with DB_LOCK:
+        cur = conn.cursor()
+        cur.execute("SELECT to_id FROM outbox WHERE packet_id = ? LIMIT 1",
+                    (int(packet_id),))
+        row = cur.fetchone()
+    if not row:
+        return None
+    return row[0]
+
+
 def sweep_stale_pending_acks(conn: sqlite3.Connection, max_age_sec: int = 180) -> int:
     """Mark any pending outbox rows older than max_age_sec as 'no_ack'. Returns rows affected."""
     cutoff = utc_ts() - max_age_sec
@@ -1849,7 +1866,13 @@ class Gateway:
         return self.iface.sendText(text, **base_kwargs)
 
     def _handle_ack_packet(self, packet, source: str) -> None:
-        """Shared ACK/NAK handling for both onResponse callback and pubsub routing events."""
+        """Shared ACK/NAK handling for both onResponse callback and pubsub routing events.
+
+        Distinguishes between an *explicit* end-to-end ACK from the recipient
+        and an *implicit* ACK that the firmware synthesises when it overhears
+        the packet being relayed by another node. The latter does NOT mean
+        the destination received the message (the destination might be off
+        or out of range), so we map it to 'implicit_ack' instead of 'acked'."""
         try:
             if not isinstance(packet, dict):
                 return
@@ -1866,19 +1889,39 @@ class Gateway:
             err_s = err.name if hasattr(err, "name") else str(err)
             err_s = (err_s or "NONE").upper()
 
+            try:
+                rid = int(request_id)
+            except Exception:
+                return
+
+            # Who actually sent this routing reply?
+            ack_from_id = packet.get("fromId")
+            if ack_from_id is None:
+                from_num = packet.get("from")
+                if from_num is not None:
+                    try:
+                        ack_from_id = int_to_node_id(from_num)
+                    except Exception:
+                        ack_from_id = None
+
             if err_s in ("NONE", "0"):
-                new_status = "acked"
+                # Compare the ACK's sender with the original destination.
+                # Match  -> genuine end-to-end ACK from the recipient.
+                # Mismatch -> implicit ACK from a relay forwarding the packet.
+                expected_to_id = get_outbox_destination_by_packet(self.db, rid)
+                if (ack_from_id and expected_to_id and
+                        str(ack_from_id) == str(expected_to_id)):
+                    new_status = "acked"
+                else:
+                    new_status = "implicit_ack"
             elif err_s in ("MAX_RETRANSMIT", "TIMEOUT"):
                 new_status = "no_ack"
             else:
                 new_status = "nacked"
 
-            try:
-                rid = int(request_id)
-            except Exception:
-                return
             n = update_outbox_ack_by_packet(self.db, rid, new_status)
-            print(f"[GW] ACK via {source} for packet_id={rid}: {new_status} ({err_s}) rows_updated={n}")
+            print(f"[GW] ACK via {source} for packet_id={rid}: {new_status} "
+                  f"(err={err_s}, ack_from={ack_from_id}, rows_updated={n})")
         except Exception as e:
             print(f"[GW] _handle_ack_packet error: {e}")
 

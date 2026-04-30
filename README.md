@@ -11,7 +11,7 @@ Web-based Meshtastic messaging, mapping & debugging application.
 
 This project runs on a Raspberry Pi (or any Linux host) and connects to a Meshtastic node over WiFi (TCP) using the Meshtastic Python library. It stores messages and node information in SQLite, and provides a lightweight Flask web UI for viewing and sending messages, monitoring active nodes, viewing positions on a map, and inspecting raw packets.
 
-It also includes a small set of opt-in **Services** that can reply automatically to direct messages — for example, replying with the latest METAR weather report when a node sends a private message like `wx EFHK`.
+It also includes a small set of opt-in **Services** that can reply automatically to direct messages — for example, replying with the latest METAR or TAF when a node sends a private message like `wx EFHK` / `taf EFHK`, or with a compact solar-propagation summary on `cmd solar`.
 
 
 ## What it does
@@ -26,7 +26,7 @@ Connects to a Meshtastic device via TCP (WiFi) and subscribes to incoming packet
 - Positions (for the map and per-node track lines)
 - Routing / ACK packets (used to confirm delivery of outgoing direct messages)
 - Traffic debug stream
-- Message services (e.g. METAR)
+- Message services (METAR, TAF, Solar)
 
 ### SQLite database
 
@@ -36,7 +36,7 @@ Stores:
 - Broadcast chat (separate from Inbox/Outbox, per channel)
 - Nodes (latest known info, RSSI/SNR, last position)
 - Positions (history, used for map markers and tracklines)
-- Service log (e.g. recent METAR queries, status, replies)
+- Service log (recent METAR / TAF / Solar queries, status, replies)
 
 The database uses WAL mode, so you will see three files:
 
@@ -60,7 +60,7 @@ The gateway performs lightweight schema migrations automatically on startup, so 
 - **Map** — last known positions of all heard nodes. Filled circles show node location (green = recent, blue = older); the side list shows hop count and distance per node, and clicking a node opens a popup with full details including hop count. Optional per-node track lines, configurable last *N* points. The map automatically uses light or dark tiles depending on the theme setting.
 - **Debug** — terminal-style view of raw JSON packets, with pause/copy/filter controls.
 - **Status** — best-effort live node info from the interface plus the gateway's own connection state, and a *Maintenance* card with controls to remove "unknown" nodes (no name received) on demand and to remove a specific node chosen from a dropdown.
-- **Services** — enable/disable services (currently METAR), configure reply delay, and see the latest service-traffic log.
+- **Services** — enable/disable the combined METAR / TAF / Solar service, configure the reply delay, and see the latest service-traffic log.
 - **Send** — per-node chat / send-message view (direct messages), with ACK feedback.
 
 There is also a global **Theme** toggle in the navbar (light / dark) and a **New message** indicator that shows in the top right when there are unread direct messages.
@@ -259,13 +259,18 @@ This action is also subject to the same caveat as the unknown cleanup: a node th
 
 ### Services
 
-The Services page lets you enable or disable services that are integrated into the gateway and tweak their settings. Currently implemented:
+The Services page hosts a combined **METAR / TAF / Solar** weather and propagation service. A single Enabled/Disabled switch controls all three, and they share one reply-delay setting. Currently implemented commands (sent to the gateway as private direct messages):
 
-- **METAR weather report.** Send a private direct message to the gateway with text like `wx EFHK` (Helsinki-Vantaa) and the latest METAR for that airport is sent back to your node. Any ICAO airport code worldwide can be queried by changing the four-letter code.
-- **Reply delay.** A configurable delay (seconds) before the METAR reply is sent, useful for nodes that are slow to switch RX/TX state.
-- **Service log.** The Services page also shows the most recent METAR requests with status (request / ok / queued / fail), so you can quickly verify that the service is working.
+- **`wx <ICAO>`** — replies with the latest METAR for that airport. Any four-letter ICAO code worldwide works (e.g. `wx efhk` for Helsinki-Vantaa, `wx kjfk` for JFK). Source: NOAA TGFTP.
+- **`taf <ICAO>`** — replies with the latest TAF (Terminal Aerodrome Forecast). The leading `TAF EFHK` keyword is stripped to save bytes (you already know the ICAO from your query) but the issuance timestamp (`ddhhmmZ`) is kept so you can see when the forecast was generated. Same source. TAF replies are truncated to fit one Meshtastic packet (~220 chars); trailing characters that don't fit are dropped and an `…` is appended.
+- **`cmd solar`** — replies with a compact one-line solar / propagation summary built from `hamqsl.com/solarxml.php`. The reply uses short labels in this order, omitting any field the source didn't report: `SFI` (10.7 cm flux), `SN` (sunspot number), `X` (X-ray class), `A` (A index), `K` (K index), `AU` (aurora), `BZE` (interplanetary magnetic field Bz), `SW` (solar wind, km/s), `Pf` (proton flux), `Ef` (electron flux). Example: `SFI 143 SN 160 X B9.7 A 4 K 1 AU 4 BZE -4.0 SW 377.2 Pf 14 Ef 2360`. The same 220-char truncation applies.
 
-Service-command messages (e.g. `wx EFHK`) are **not** stored in the Inbox or counted toward the unread count — they are treated as commands rather than chat.
+Other Services controls:
+
+- **Reply delay.** A configurable delay (seconds) before any service reply is sent, useful for nodes that are slow to switch RX/TX state. Shared by all three commands.
+- **Service log.** The Services page shows the most recent requests across all three services with status (`req` / `ok` / `queued` / `fail`) and a service column so you can tell METAR / TAF / Solar entries apart at a glance.
+
+Service-command messages (e.g. `wx EFHK`, `taf EFHK`, `cmd solar`) are **not** stored in the Inbox or counted toward the unread count — they are treated as commands rather than chat. The pattern list is centralized in the code (`SERVICE_COMMAND_PATTERNS`), so adding more `cmd <name>` style commands later is a one-line change.
 
 ### Send a direct message
 

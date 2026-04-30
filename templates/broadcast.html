@@ -20,6 +20,15 @@
           <a href="{{ url_for('broadcast', limit=100, channel=selected_channel) }}">100</a> |
           <a href="{{ url_for('broadcast', limit=500, channel=selected_channel) }}">500</a>
         </div>
+        <div class="smallish text-muted">
+          Refresh:
+          <select id="broadcastRefreshRate" class="form-select form-select-sm d-inline-block" style="width: auto;">
+            <option value="0" selected>Off</option>
+            <option value="10">10s</option>
+            <option value="30">30s</option>
+            <option value="60">60s</option>
+          </select>
+        </div>
       </div>
     </div>
 
@@ -73,5 +82,33 @@
   const box = document.getElementById("broadcastBox");
   if (box) { box.scrollTop = box.scrollHeight; }
 })();
+</script>
+
+<script>
+  (function () {
+    var sel = document.getElementById('broadcastRefreshRate');
+    if (!sel) return;
+    try {
+      var saved = localStorage.getItem('mg-broadcast-refresh');
+      if (saved !== null) {
+        for (var i = 0; i < sel.options.length; i++) {
+          if (sel.options[i].value === saved) { sel.value = saved; break; }
+        }
+      }
+    } catch (e) {}
+    var timer = null;
+    function applyRate() {
+      if (timer) { clearInterval(timer); timer = null; }
+      var sec = parseInt(sel.value, 10) || 0;
+      if (sec > 0) {
+        timer = setInterval(function () { location.reload(); }, sec * 1000);
+      }
+    }
+    sel.addEventListener('change', function () {
+      try { localStorage.setItem('mg-broadcast-refresh', sel.value); } catch (e) {}
+      applyRate();
+    });
+    applyRate();
+  })();
 </script>
 {% endblock %}

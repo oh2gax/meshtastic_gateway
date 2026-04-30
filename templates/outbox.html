@@ -14,7 +14,7 @@
     <div class="table-responsive">
     <table class="table table-sm table-striped align-middle">
       <thead><tr>
-        <th>Created</th><th>Status</th><th>To</th><th>Text</th><th title="Y = ACKed by recipient. 3 = no ACK after firmware retries. ... = waiting. — = not applicable (broadcast or hand-off failed).">Tries</th><th></th>
+        <th>Created</th><th>Status</th><th>To</th><th>Text</th><th title="Y = ACKed by recipient. S = sent, no ACK back. … = waiting for outcome. — = not applicable.">Ack</th><th></th>
       </tr></thead>
       <tbody>
       {% for r in rows %}
@@ -34,10 +34,9 @@
           <td class="mono">
             {% set a = r["ack_status"] %}
             {% if a == "acked" %}<span class="text-success"><b>Y</b></span>
-            {% elif a == "no_ack" or a == "nacked" %}<span class="text-danger">3</span>
+            {% elif a == "no_ack" or a == "nacked" %}<span class="text-warning"><b>S</b></span>
             {% elif a == "pending" %}<span class="text-muted">…</span>
-            {% elif a == "na" %}<span class="dim">—</span>
-            {% else %}{{ r["tries"] }}
+            {% else %}<span class="dim">—</span>
             {% endif %}
           </td>
           <td class="text-end">

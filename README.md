@@ -54,9 +54,9 @@ The gateway performs lightweight schema migrations automatically on startup, so 
 ## Web UI pages
 
 - **Inbox** — received direct messages, with unread highlighting and per-message *Mark read* / *Delete* buttons (see *New message notifications* below).
-- **Outbox** — sent direct messages and send queue status, including ACK status per outgoing message.
+- **Outbox** — sent direct messages and send queue status, with an *Ack* column per outgoing message and optional auto-refresh (default 10 s).
 - **Active Nodes** — list of heard nodes with selectable time windows, including a *Pos* indicator (`Y` if a position is known, otherwise `—`) and a *Hops* column showing how many hops away each node is (`0` = direct neighbor, `—` = unknown). Optional auto-refresh (`Off` / `10s` / `30s` / `60s`).
-- **Broadcast** — chat-style view of broadcast traffic. A channel selector at the top lets you view any of the channels configured on your Meshtastic device, and you can broadcast a message to the currently selected channel from the same page. Broadcast traffic is kept separate from Inbox/Outbox.
+- **Broadcast** — chat-style view of broadcast traffic. A channel selector at the top lets you view any of the channels configured on your Meshtastic device, and you can broadcast a message to the currently selected channel from the same page. Optional auto-refresh (`Off` / `10s` / `30s` / `60s`). Broadcast traffic is kept separate from Inbox/Outbox.
 - **Map** — last known positions of all heard nodes. Filled circles show node location (green = recent, blue = older); the side list shows hop count and distance per node, and clicking a node opens a popup with full details including hop count. Optional per-node track lines, configurable last *N* points. The map automatically uses light or dark tiles depending on the theme setting.
 - **Debug** — terminal-style view of raw JSON packets, with pause/copy/filter controls.
 - **Status** — best-effort live node info from the interface plus the gateway's own connection state, and a *Maintenance* card with controls to remove "unknown" nodes (no name received) on demand and to remove a specific node chosen from a dropdown.
@@ -194,12 +194,16 @@ Broadcast messages and incoming service commands (see *Services*) are not stored
 
 ### Outbox — sent direct messages and queue status
 
-All sent direct messages, their destination, send status, and an **ACK** column showing whether the message was acknowledged by the recipient. Possible ACK display values include:
+All sent direct messages, their destination, send status, and an **Ack** column showing the delivery state of each outgoing message. The display follows Android-style conventions:
 
-- `Y` — acknowledged
-- A small number (e.g. `3`) — number of retransmission attempts so far
-- `…` — pending ACK
-- `—` — no ACK information available (e.g. for older entries)
+- `Y` (green) — ACK received from the recipient. Message delivered end-to-end.
+- `S` (yellow/orange) — sent into the mesh, but no ACK came back. The radio handed the message off and tried (possibly with retransmissions or relays in the network), but the destination never confirmed receipt. Meshtastic firmware does not surface a separate "definitely relayed by another node" signal, so any non-ACK outcome falls under `S`.
+- `…` (gray) — waiting for the routing reply. Normal short-lived state right after sending.
+- `—` (faded) — not applicable. Used for broadcasts (which don't get end-to-end ACKs) and for entries where the radio hand-off failed before the packet ever went on-air.
+
+The raw retransmission count is no longer shown in the table — it didn't add useful information for normal use. The `last_error` text still appears as a small red row underneath any failed entry, so a true send failure is still obvious.
+
+A *Refresh* dropdown (`Off` / `10s` / `30s` / `60s`) sits next to the page-size links. It defaults to **10 s** because the typical reason to look at the Outbox is to watch a freshly sent DM transition from `…` to `Y` or `S`. The choice is remembered in the browser via `localStorage`.
 
 Each entry has a *Delete* button to remove it from the queue / log.
 
@@ -217,6 +221,8 @@ A *Refresh* dropdown next to the time-window links lets you set the page to auto
 ### Broadcast messages
 
 Chat-style view of broadcast traffic. Use the channel selector at the top of the page to switch between any channels configured on your Meshtastic device. You can broadcast a message to the currently selected channel from the same page. Broadcast traffic is kept separate from Inbox/Outbox.
+
+A *Refresh* dropdown next to the channel and page-size selectors lets the page auto-refresh at a fixed interval (`10s`, `30s`, `60s`) or stay at `Off` (default). The choice is persisted in the browser via `localStorage` (under its own key, separate from the Active Nodes and Outbox refresh settings).
 
 ### Map
 

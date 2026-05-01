@@ -9,7 +9,7 @@ Web-based Meshtastic messaging, mapping & debugging application.
 
 # Meshtastic WiFi Gateway + Web UI (Flask + SQLite)
 
-This project runs on a Raspberry Pi (or any Linux host) and connects to a Meshtastic node over WiFi (TCP) using the Meshtastic Python library. It stores messages and node information in SQLite, and provides a lightweight Flask web UI for viewing and sending messages, monitoring active nodes, viewing positions on a map, and inspecting raw packets.
+This project runs on a Raspberry Pi (or any Linux host) and connects to a Meshtastic node over WiFi (TCP) using the Meshtastic Python library. It has been developed and tested with **Heltec V3 and Heltec V4** devices; other Meshtastic-supported hardware may work but hasn't been verified. It stores messages and node information in SQLite, and provides a lightweight Flask web UI for viewing and sending messages, monitoring active nodes, viewing positions on a map, and inspecting raw packets.
 
 It also includes a small set of opt-in **Services** that can reply automatically to direct messages — for example, replying with the latest METAR or TAF when a node sends a private message like `wx EFHK` / `taf EFHK`, or with a compact solar-propagation summary on `cmd solar`.
 

@@ -25,18 +25,18 @@
     <div class="table-responsive">
     <table class="table table-sm table-striped align-middle">
       <thead><tr>
-        <th>Created</th><th>Status</th><th>To</th><th>Text</th><th title="Y = ACK from recipient (end-to-end delivered). S = sent (no end-to-end ACK; may have been forwarded by relays but the destination never confirmed). … = waiting for outcome. — = not applicable.">Ack</th><th></th>
+        <th>Created</th><th>To</th><th>Text</th><th title="Y = ACK from recipient (end-to-end delivered). S = sent (no end-to-end ACK; may have been forwarded by relays but the destination never confirmed). … = waiting for outcome. — = not applicable.">Ack</th><th></th>
       </tr></thead>
       <tbody>
       {% for r in rows %}
         <tr>
           <td class="mono">{{ r["created_ts_iso"] }}</td>
-          <td class="mono">{{ r["status"] }}</td>
           <td>
             {% if r["to_id"] %}
-              <div>{{ node_display(r["to_long"], r["to_short"], r["to_id"]) }}</div>
-              <div class="small dim mono">{{ r["to_id"] }}</div>
-              <div class="small text-muted"><a href="{{ url_for('chat_with', node_id=r['to_id']) }}">Chat</a></div>
+              {{ node_display(r["to_long"], r["to_short"], r["to_id"]) }}{% if r["to_long"] or r["to_short"] %} <span class="small text-muted mono">{{ r["to_id"] }}</span>{% endif %}
+              <span class="small text-muted ms-2">
+                &middot; <a href="{{ url_for('chat_with', node_id=r['to_id']) }}">Chat</a>
+              </span>
             {% else %}
               <b>BROADCAST</b>
             {% endif %}
@@ -57,7 +57,7 @@
           </td>
         </tr>
         {% if r["last_error"] %}
-          <tr><td colspan="6" class="small text-danger mono">Error: {{ r["last_error"] }}</td></tr>
+          <tr><td colspan="5" class="small text-danger mono">Error: {{ r["last_error"] }}</td></tr>
         {% endif %}
       {% endfor %}
       </tbody>

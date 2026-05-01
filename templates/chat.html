@@ -3,25 +3,64 @@
 
 {% endblock %}
 {% block body %}
-<div class="d-flex justify-content-between align-items-center mb-2">
-      <h5 class="m-0">Chat with <b>{{ title_name }}</b> <span class="mono dim">{{node_id}}</span></h5>
-      <div class="smallish">
-        <a href="{{ url_for('chat_with', node_id=node_id, limit=20) }}">20</a> |
-        <a href="{{ url_for('chat_with', node_id=node_id, limit=100) }}">100</a> |
-        <a href="{{ url_for('chat_with', node_id=node_id, limit=500) }}">500</a>
+<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+      <h5 class="m-0">
+        {% if node_id %}
+          Chat with <b>{{ title_name }}</b> <span class="mono dim">{{ node_id }}</span>
+        {% else %}
+          Chat
+        {% endif %}
+      </h5>
+      <div class="d-flex gap-2 align-items-center flex-wrap">
+        <div class="smallish text-muted">
+          Node:
+          <select id="chatNodePicker" class="form-select form-select-sm d-inline-block" style="min-width: 240px;">
+            <option value="">-- select a node --</option>
+            {% for n in (all_nodes or []) %}
+              {% if n['node_id'] != my_id %}
+                <option value="{{ n['node_id'] }}" {% if n['node_id'] == node_id %}selected{% endif %}>
+                  {{ node_display(n['long_name'], n['short_name'], n['node_id']) }} &mdash; {{ n['node_id'] }}
+                </option>
+              {% endif %}
+            {% endfor %}
+          </select>
+        </div>
+        {% if node_id %}
+          <div class="smallish">
+            <a href="{{ url_for('chat_with', node_id=node_id, limit=20) }}">20</a> |
+            <a href="{{ url_for('chat_with', node_id=node_id, limit=100) }}">100</a> |
+            <a href="{{ url_for('chat_with', node_id=node_id, limit=500) }}">500</a>
+          </div>
+        {% endif %}
+        <div class="smallish text-muted">
+          Refresh:
+          <select id="chatRefreshRate" class="form-select form-select-sm d-inline-block" style="width: auto;">
+            <option value="0" selected>Off</option>
+            <option value="10">10s</option>
+            <option value="30">30s</option>
+            <option value="60">60s</option>
+          </select>
+        </div>
       </div>
     </div>
 
+    {% if node_id %}
     <div class="card mb-3">
-      <div class="card-body" style="max-height:60vh; overflow:auto;">
+      <div class="card-body" id="chatBox" style="max-height:60vh; overflow:auto;">
         {% for m in msgs %}
           <div class="mb-2">
-            <div class="small text-muted mono">{{ m["ts_iso"] }} · {{ m["direction"] }}</div>
+            <div class="small text-muted mono">{{ m["ts_iso"] }} &middot; {{ m["direction"] }}{% if m["direction"] == "in" and m["hops"] is not none %} &middot; Hops {{ m["hops"] }}{% endif %}{% if m["direction"] == "out" %} &middot;
+              {% set a = m["ack_status"] %}
+              {% if a == "acked" %}<span class="text-success"><b>Y</b></span>
+              {% elif a == "no_ack" or a == "nacked" or a == "implicit_ack" %}<span class="text-warning"><b>S</b></span>
+              {% elif a == "pending" %}<span class="text-muted">…</span>
+              {% else %}<span class="dim">—</span>
+              {% endif %}{% endif %}</div>
             <div>
               {% if m["direction"] == "in" %}
                 <b>{{ node_display(m["from_long"], m["from_short"], m["from_id"]) }}</b>:
               {% else %}
-                <b>Me</b> → <b>{{ node_display(m["to_long"], m["to_short"], m["to_id"]) }}</b>:
+                <b>Me</b> &rarr; <b>{{ node_display(m["to_long"], m["to_short"], m["to_id"]) }}</b>:
               {% endif %}
               {{ m["text"] }}
             </div>
@@ -33,12 +72,65 @@
       </div>
     </div>
 
-    <form method="post" action="{{ url_for('send_post') }}" class="card card-body">
-      <input type="hidden" name="to_id" value="{{ node_id }}">
+    <form method="post" action="{{ url_for('chat_send', node_id=node_id) }}" class="card card-body">
       <div class="mb-2">
         <label class="form-label">Send to {{ title_name }}</label>
         <textarea class="form-control" name="text" rows="2" maxlength="240" required></textarea>
       </div>
-      <button class="btn btn-primary" type="submit">Queue</button>
+      <button class="btn btn-primary" type="submit">Send</button>
     </form>
+    {% else %}
+    <div class="alert alert-secondary">
+      Select a node from the dropdown above to start a chat.
+    </div>
+    {% endif %}
+
+<script>
+  // Node picker → navigate to /chat/<id>
+  (function () {
+    var picker = document.getElementById('chatNodePicker');
+    if (!picker) return;
+    picker.addEventListener('change', function () {
+      var v = picker.value;
+      if (v) { window.location.href = '/chat/' + encodeURIComponent(v); }
+    });
+  })();
+</script>
+
+<script>
+  // Refresh interval (Off / 10s / 30s / 60s) with localStorage persistence.
+  (function () {
+    var sel = document.getElementById('chatRefreshRate');
+    if (!sel) return;
+    try {
+      var saved = localStorage.getItem('mg-chat-refresh');
+      if (saved !== null) {
+        for (var i = 0; i < sel.options.length; i++) {
+          if (sel.options[i].value === saved) { sel.value = saved; break; }
+        }
+      }
+    } catch (e) {}
+    var timer = null;
+    function applyRate() {
+      if (timer) { clearInterval(timer); timer = null; }
+      var sec = parseInt(sel.value, 10) || 0;
+      if (sec > 0) {
+        timer = setInterval(function () { location.reload(); }, sec * 1000);
+      }
+    }
+    sel.addEventListener('change', function () {
+      try { localStorage.setItem('mg-chat-refresh', sel.value); } catch (e) {}
+      applyRate();
+    });
+    applyRate();
+  })();
+</script>
+
+<script>
+  // Auto-scroll the chat history to the latest message on page load.
+  (function () {
+    var box = document.getElementById("chatBox");
+    if (box) { box.scrollTop = box.scrollHeight; }
+  })();
+</script>
 {% endblock %}

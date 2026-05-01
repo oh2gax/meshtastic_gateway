@@ -40,12 +40,11 @@
             {{ r["ts_iso"] }}
           </td>
           <td>
-            <div>{{ node_display(r["from_long"], r["from_short"], r["from_id"]) }}</div>
-            <div class="small dim mono">{{ r["from_id"] }}</div>
-            <div class="small text-muted">
-              <a href="{{ url_for('chat_with', node_id=r['from_id']) }}">Chat</a> ·
-              <a href="{{ url_for('send_form', to_id=r['from_id']) }}">Reply</a>
-            </div>
+            {{ node_display(r["from_long"], r["from_short"], r["from_id"]) }}{% if r["from_long"] or r["from_short"] %} <span class="small text-muted mono">{{ r["from_id"] }}</span>{% endif %}{% if r["hops"] is not none %} <span class="small text-muted">&middot; Hops {{ r["hops"] }}</span>{% endif %}
+            <span class="small text-muted ms-2">
+              &middot; <a href="{{ url_for('chat_with', node_id=r['from_id']) }}">Chat</a>
+              &middot; <a href="{{ url_for('send_form', to_id=r['from_id']) }}">Reply</a>
+            </span>
           </td>
           <td>{{ r["text"] }}</td>
           <td class="mono">{{ r["rx_rssi"] }}</td>

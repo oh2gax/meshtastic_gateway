@@ -355,3 +355,10 @@ That's expected. SQLite WAL mode uses these for performance and safe concurrency
 ## Security notes
 
 The web UI has no authentication by default. If exposed beyond your LAN, put it behind a reverse proxy with authentication, or bind it to `127.0.0.1` and access it through an SSH tunnel.
+
+
+## License
+
+This project is released under the **MIT License** — you're free to use, copy, modify, distribute, and reuse the code, including in commercial projects, as long as the original copyright notice and the license text are included with substantial portions of the code. The full license text is in the [`LICENSE`](LICENSE) file at the repository root.
+
+If you build something interesting on top of it, a quick note (or a star on the repo) is appreciated but not required. 73 — Otso, OH2GAX.

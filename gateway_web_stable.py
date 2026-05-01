@@ -1013,6 +1013,12 @@ def list_inbox(conn: sqlite3.Connection, limit: int = 50) -> List[sqlite3.Row]:
         cur.execute("""
         SELECT m.id, m.ts, m.ts_iso, m.from_id, m.to_id, m.text, m.rx_rssi, m.rx_snr, m.hop_limit,
                COALESCE(m.is_read, 0) AS is_read,
+               CASE
+                 WHEN m.hop_start IS NOT NULL AND m.hop_limit IS NOT NULL
+                      AND m.hop_start >= m.hop_limit
+                 THEN m.hop_start - m.hop_limit
+                 ELSE NULL
+               END AS hops,
                nf.long_name AS from_long, nf.short_name AS from_short
         FROM messages m
         LEFT JOIN nodes nf ON nf.node_id = m.from_id
@@ -1062,6 +1068,28 @@ def mark_all_inbox_read(conn: sqlite3.Connection) -> None:
         WHERE direction='in' AND COALESCE(is_read, 0) = 0
         """)
         conn.commit()
+
+
+def mark_inbox_read_from_node(conn: sqlite3.Connection, node_id: str) -> int:
+    """Mark all unread incoming DMs from a specific node as read. Returns
+    the number of rows affected. Broadcast traffic is left alone."""
+    if not node_id:
+        return 0
+    with DB_LOCK:
+        cur = conn.cursor()
+        cur.execute("""
+        UPDATE messages SET is_read=1
+        WHERE direction='in'
+          AND from_id = ?
+          AND COALESCE(is_read, 0) = 0
+          AND (
+                (to_id IS NOT NULL AND lower(to_id) NOT IN ('^all','!ffffffff','ffffffff','0xffffffff'))
+                OR
+                (to_id IS NULL AND to_num IS NOT NULL AND to_num != 4294967295)
+              )
+        """, (node_id,))
+        conn.commit()
+        return cur.rowcount or 0
 
 def list_outbox(conn: sqlite3.Connection, limit: int = 50) -> List[sqlite3.Row]:
     conn.row_factory = sqlite3.Row
@@ -1297,24 +1325,71 @@ def get_track_points(conn: sqlite3.Connection, node_id: str, minutes: int) -> Li
 
     return [(float(r["lat"]), float(r["lon"])) for r in rows]
 
-def chat_messages(conn: sqlite3.Connection, node_id: str, limit: int) -> List[sqlite3.Row]:
+def chat_messages(conn: sqlite3.Connection, node_id: str, limit: int) -> List[Dict[str, Any]]:
+    """Return chat history with the given node, direct messages only.
+
+    Incoming rows come from the messages table (DMs from this node only;
+    broadcasts excluded). Outgoing rows come from the outbox table so we
+    can attach the per-message ack_status (Y / S / pending / na). The two
+    streams are merged by timestamp, the most recent `limit` rows are
+    kept, and the result is returned chronologically (oldest first) so
+    the caller can render newest-at-bottom directly."""
     conn.row_factory = sqlite3.Row
     limit = max(5, min(int(limit), 2000))
     with DB_LOCK:
         cur = conn.cursor()
+
+        # Incoming DMs from this node.
         cur.execute("""
-        SELECT m.id, m.ts, m.ts_iso, m.direction, m.from_id, m.to_id, m.text, m.rx_rssi, m.rx_snr,
+        SELECT m.id, m.ts, m.ts_iso, m.direction, m.from_id, m.to_id, m.text,
+               m.rx_rssi, m.rx_snr,
+               CASE
+                 WHEN m.hop_start IS NOT NULL AND m.hop_limit IS NOT NULL
+                      AND m.hop_start >= m.hop_limit
+                 THEN m.hop_start - m.hop_limit
+                 ELSE NULL
+               END AS hops,
                nf.long_name AS from_long, nf.short_name AS from_short,
-               nt.long_name AS to_long, nt.short_name AS to_short
+               nt.long_name AS to_long, nt.short_name AS to_short,
+               NULL AS ack_status
         FROM messages m
         LEFT JOIN nodes nf ON nf.node_id = m.from_id
         LEFT JOIN nodes nt ON nt.node_id = m.to_id
-        WHERE (m.direction='in' AND m.from_id=?)
-           OR (m.direction='out' AND m.to_id=?)
+        WHERE m.direction='in' AND m.from_id=?
+          AND (
+                (m.to_id IS NOT NULL AND lower(m.to_id) NOT IN ('^all','!ffffffff','ffffffff','0xffffffff'))
+                OR
+                (m.to_id IS NULL AND m.to_num IS NOT NULL AND m.to_num != 4294967295)
+              )
         ORDER BY m.ts DESC
         LIMIT ?
-        """, (node_id, node_id, limit))
-        return cur.fetchall()
+        """, (node_id, limit))
+        in_rows = [dict(r) for r in cur.fetchall()]
+
+        # Outgoing DMs to this node, sourced from outbox so ack_status is available.
+        cur.execute("""
+        SELECT o.id, o.created_ts AS ts, o.created_ts_iso AS ts_iso,
+               'out' AS direction,
+               NULL AS from_id, o.to_id, o.text,
+               NULL AS rx_rssi, NULL AS rx_snr,
+               NULL AS hops,
+               NULL AS from_long, NULL AS from_short,
+               nt.long_name AS to_long, nt.short_name AS to_short,
+               o.ack_status
+        FROM outbox o
+        LEFT JOIN nodes nt ON nt.node_id = o.to_id
+        WHERE o.to_id = ?
+        ORDER BY o.created_ts DESC
+        LIMIT ?
+        """, (node_id, limit))
+        out_rows = [dict(r) for r in cur.fetchall()]
+
+    combined = in_rows + out_rows
+    # Sort newest-first by ts so we can apply the limit, then reverse.
+    combined.sort(key=lambda r: (r.get("ts") or 0), reverse=True)
+    combined = combined[:limit]
+    combined.reverse()
+    return combined
 
 def node_label_for_id(conn: sqlite3.Connection, node_id: str) -> str:
     conn.row_factory = sqlite3.Row
@@ -2197,16 +2272,45 @@ def nodes():
     rows = list_active_nodes(DB_CONN, win_sec)
     return render_template("nodes.html", host=HOST, extra_head="", rows=rows, window=window)
 
+@app.get("/chat", endpoint="chat_index")
+def chat_index():
+    """Chat landing page with the node picker but no current conversation."""
+    try:
+        all_nodes = list_all_nodes_for_picker(DB_CONN)
+    except Exception:
+        all_nodes = []
+    return render_template(
+        "chat.html", host=HOST, extra_head="",
+        msgs=[], node_id="", limit=DEFAULT_CHAT_LIMIT, title="",
+        all_nodes=all_nodes, my_id=(gateway.my_id or ""),
+    )
+
+
 @app.get("/chat/<path:node_id>")
 def chat_with(node_id: str):
     node_id = (node_id or "").strip()
     if not node_id:
-        return redirect(url_for("nodes"))
+        return redirect(url_for("chat_index"))
     limit = int(request.args.get("limit", str(DEFAULT_CHAT_LIMIT)))
     limit = max(10, min(limit, 2000))
+    # Opening the chat acts as "I'm reading this conversation now" — clear
+    # the unread state for any DMs from this node so the navbar indicator
+    # and Inbox row highlight come down accordingly.
+    try:
+        mark_inbox_read_from_node(DB_CONN, node_id)
+    except Exception:
+        pass
     msgs = chat_messages(DB_CONN, node_id, limit=limit)
     title = node_label_for_id(DB_CONN, node_id)
-    return render_template("chat.html", host=HOST, extra_head="", msgs=msgs, node_id=node_id, limit=limit, title=title)
+    try:
+        all_nodes = list_all_nodes_for_picker(DB_CONN)
+    except Exception:
+        all_nodes = []
+    return render_template(
+        "chat.html", host=HOST, extra_head="",
+        msgs=msgs, node_id=node_id, limit=limit, title=title,
+        all_nodes=all_nodes, my_id=(gateway.my_id or ""),
+    )
 
 @app.post("/chat/<path:node_id>/send")
 def chat_send(node_id: str):

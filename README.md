@@ -55,10 +55,10 @@ The gateway performs lightweight schema migrations automatically on startup, so 
 
 - **Inbox** — received direct messages on a single compact line per row (name + id + per-message *Hops* + *Chat* / *Reply* links), with unread highlighting and per-message *Mark read* / *Delete* buttons (see *New message notifications* below).
 - **Outbox** — sent direct messages on a single compact line per row, with an *Ack* column per outgoing message (`Y` / `S` / `…` / `—`) and optional auto-refresh (default 10 s).
-- **Active Nodes** — list of heard nodes with selectable time windows, including a *Pos* indicator (`Y` if a position is known, otherwise `—`) and a *Hops* column showing how many hops away each node is (`0` = direct neighbor, `—` = unknown). Optional auto-refresh (`Off` / `10s` / `30s` / `60s`).
-- **Broadcast** — chat-style view of broadcast traffic. A channel selector at the top lets you view any of the channels configured on your Meshtastic device, and you can broadcast a message to the currently selected channel from the same page. Optional auto-refresh (`Off` / `10s` / `30s` / `60s`). Broadcast traffic is kept separate from Inbox/Outbox.
+- **Active Nodes** — list of heard nodes with selectable time windows, including a *Pos* indicator (`Y` if a position is known, otherwise `—`) and a *Hops* column showing how many hops away each node is (`0` = direct neighbor, `—` = unknown). The page header shows the live total in a `count=N` chip next to the time-window chip. Optional auto-refresh (`Off` / `10s` / `30s` / `60s`).
+- **Broadcast** — chat-style view of broadcast traffic. A channel selector at the top lets you view any of the channels configured on your Meshtastic device, and you can broadcast a message to the currently selected channel from the same page. The navbar's *Broadcast* button turns red whenever a new broadcast has arrived since you last opened the page (across any channel), and reverts to its normal style on the next visit. Optional auto-refresh (`Off` / `10s` / `30s` / `60s`). Broadcast traffic is kept separate from Inbox/Outbox.
 - **Chat** — per-node DM thread with newest at the bottom and auto-scroll on open. Includes a node picker dropdown, optional auto-refresh, ACK status on outgoing rows, *Hops* annotation on incoming rows, and auto-marks DMs from the open conversation as read. Reachable from the navbar or from any *Chat* link in Inbox / Outbox / Active Nodes.
-- **Map** — last known positions of all heard nodes. Filled circles show node location (green = recent, blue = older); the side list shows hop count and distance per node, and clicking a node opens a popup with full details including hop count. Optional per-node track lines, configurable last *N* points. The map automatically uses light or dark tiles depending on the theme setting.
+- **Map** — last known positions of all heard nodes. Filled circles show node location (green = recent, blue = older); hovering a circle shows a small tooltip with the node's short name, and clicking opens a popup with full details (RSSI, SNR, hop count, last seen, lat/lon). The side list also shows hop count and distance per node. Optional per-node track lines, configurable last *N* points. The map automatically uses light or dark tiles depending on the theme setting.
 - **Debug** — terminal-style view of raw JSON packets, with pause/copy/filter controls.
 - **Status** — best-effort live node info from the interface plus the gateway's own connection state, and a *Maintenance* card with controls to remove "unknown" nodes (no name received) on demand and to remove a specific node chosen from a dropdown.
 - **Services** — enable/disable the combined METAR / TAF / Solar service, configure the reply delay, and see the latest service-traffic log.
@@ -223,7 +223,9 @@ The *Chat* page shows the conversation with a single specific node, direct messa
 
 ### Active Nodes
 
-All heard nodes with timestamp, RSSI/SNR and other per-node info, filtered by a selectable time window. Two compact columns at the right of the table summarize the radio path:
+All heard nodes with timestamp, RSSI/SNR and other per-node info, filtered by a selectable time window. The page header carries two small mono chips: `window=…` (the active time-window filter) and `count=N` (the number of nodes currently shown), so you can see at a glance how many nodes have been heard inside the chosen window.
+
+Two compact columns at the right of the table summarize the radio path:
 
 - **Pos** — `Y` if the node has shared a position (which you'll then see on the *Map* page), `—` otherwise. Lat/lon values themselves are intentionally not shown here; the Map page is the right place to look at coordinates.
 - **Hops** — how many hops the most recent packet from this node travelled to reach the gateway. `0` means a direct neighbor (heard on-air with no relay); `1`, `2`, … indicate the number of relays involved. `—` means the hop information was not available in the packets seen so far (e.g. older firmware or packet types that don't carry it).
@@ -238,13 +240,15 @@ Chat-style view of broadcast traffic. Use the channel selector at the top of the
 
 A *Refresh* dropdown next to the channel and page-size selectors lets the page auto-refresh at a fixed interval (`10s`, `30s`, `60s`) or stay at `Off` (default). The choice is persisted in the browser via `localStorage` (under its own key, separate from the Active Nodes and Outbox refresh settings).
 
+When you're not on the Broadcast page, the navbar's *Broadcast* button itself acts as a notification: it tints **red** (outline) as soon as any new broadcast arrives across any channel, with a tooltip showing the unread count (e.g. *"3 new broadcasts since last visit"*). Opening the page records the visit and clears the highlight on the next poll. The check runs every 5 seconds and is independent of the *New message* indicator used for direct messages.
+
 ### Map
 
 - Shows last known positions for nodes that have published positions.
 - Each node is rendered as a filled circle:
   - **Green** — node was heard recently (within ~15 minutes).
   - **Blue** — node was heard earlier than that.
-- Clicking a circle (or a node entry in the side list) opens a popup with the node's name, hardware, last-seen time, position time, RSSI/SNR, lat/lon, and **hop count** (`0` = direct neighbor, `—` if unknown).
+- **Hovering** a circle shows a small tooltip with the node's *short name* (or full name / id if no short name was reported), so you can identify nodes without clicking through. **Clicking** a circle (or a node entry in the side list) opens a popup with the node's name, hardware, last-seen time, position time, RSSI/SNR, lat/lon, and **hop count** (`0` = direct neighbor, `—` if unknown).
 - The side list shows each node's device id with hop count appended (e.g. `!0ac9a768 · Hops 2`), plus its RSSI/SNR and the **distance from the gateway** (great-circle, in km). The hop suffix is omitted when no hop data is available yet, so the line stays uncluttered for nodes we haven't fully observed.
 - Track lines can be enabled per node. Track length is configurable via the *Track points* setting on the page (default 60).
 - The map switches between standard OSM tiles and a dark CARTO basemap automatically when you toggle the global Theme button.

@@ -259,6 +259,10 @@ METAR_BASE_URL = "https://tgftp.nws.noaa.gov/data/observations/metar/stations/{i
 METAR_DELAY_KEY = "metar_delay_sec"
 METAR_ENABLED_KEY = "metar_enabled"
 
+# Tracks the last time the user opened the Broadcast page; the navbar uses
+# this to decide whether to highlight the Broadcast button (red outline).
+BROADCAST_LAST_VIEWED_KEY = "broadcast_last_viewed_ts"
+
 # TAF (Terminal Aerodrome Forecast) — same NOAA TGFTP host, different path.
 TAF_BASE_URL = "https://tgftp.nws.noaa.gov/data/forecasts/taf/stations/{icao}.TXT"
 TAF_MAX_LEN = 220  # truncate to fit a single Meshtastic DM payload comfortably
@@ -1049,6 +1053,31 @@ def count_unread_dm(conn: sqlite3.Connection) -> int:
                 (to_id IS NULL AND to_num IS NOT NULL AND to_num != 4294967295)
               )
         """)
+        row = cur.fetchone()
+        return int(row[0] if row else 0)
+
+
+def count_unread_broadcasts(conn: sqlite3.Connection) -> int:
+    """Count incoming broadcast messages newer than the stored
+    'broadcast_last_viewed_ts' setting. Used by the navbar to tint the
+    Broadcast button when something has arrived since the user last
+    looked at the Broadcast page."""
+    try:
+        last_viewed = int(get_setting(conn, BROADCAST_LAST_VIEWED_KEY, "0") or "0")
+    except Exception:
+        last_viewed = 0
+    with DB_LOCK:
+        cur = conn.cursor()
+        cur.execute("""
+        SELECT COUNT(*) FROM messages
+        WHERE direction='in'
+          AND ts > ?
+          AND (
+                (to_id IS NOT NULL AND lower(to_id) IN ('^all','!ffffffff','ffffffff','0xffffffff'))
+                OR
+                (to_id IS NULL AND (to_num IS NULL OR to_num = 4294967295))
+              )
+        """, (last_viewed,))
         row = cur.fetchone()
         return int(row[0] if row else 0)
 
@@ -2134,6 +2163,15 @@ def api_unread_count():
     return {"unread": n}
 
 
+@app.get("/api/broadcast_unread")
+def api_broadcast_unread():
+    try:
+        n = count_unread_broadcasts(DB_CONN)
+    except Exception:
+        n = 0
+    return {"unread": n}
+
+
 @app.post("/msg/read/<int:msg_id>", endpoint="message_mark_read")
 def msg_mark_read(msg_id: int):
     try:
@@ -2167,6 +2205,13 @@ def outbox_delete(out_id: int):
 def broadcast():
     limit = int(request.args.get("limit", "50"))
     limit = 50 if limit not in (50, 100, 500) else limit
+
+    # Mark "broadcast page seen now" so the navbar Broadcast button stops
+    # being highlighted until something newer arrives.
+    try:
+        set_setting(DB_CONN, BROADCAST_LAST_VIEWED_KEY, str(utc_ts()))
+    except Exception:
+        pass
 
     # Channel selector: default to primary (index 0) on first visit.
     try:
@@ -2388,6 +2433,7 @@ def map_data():
         nodes.append({
             "node_id": r["node_id"],
             "name": node_display(r["long_name"], r["short_name"], r["node_id"]),
+            "short": (r["short_name"] or "").strip(),
             "hw": r["hw_model"] or "",
             "lat": n_lat,
             "lon": n_lon,

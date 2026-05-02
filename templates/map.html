@@ -176,6 +176,10 @@
             m.setStyle({ fillColor: fill, color: stroke });
           }
           m.bindPopup(popupHtml(n));
+          var tipText = (n.short && n.short.length) ? n.short : (n.name || n.node_id || "");
+          if (tipText) {
+            m.bindTooltip(tipText, { direction: "top", offset: [0, -8] });
+          }
           m.addTo(markerLayer);
         }
 

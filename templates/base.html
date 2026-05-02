@@ -29,7 +29,7 @@
     <a class="btn btn-outline-primary btn-sm" href="{{ url_for('inbox') }}">Inbox</a>
     <a class="btn btn-outline-primary btn-sm" href="{{ url_for('outbox_view') }}">Outbox</a>
     <a class="btn btn-outline-primary btn-sm" href="{{ url_for('nodes') }}">Active Nodes</a>
-    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('broadcast') }}">Broadcast</a>
+    <a id="broadcastNavBtn" class="btn btn-outline-primary btn-sm" href="{{ url_for('broadcast') }}">Broadcast</a>
     <a class="btn btn-outline-primary btn-sm" href="{{ url_for('chat_index') }}">Chat</a>
     <a class="btn btn-outline-primary btn-sm" href="{{ url_for('map_view') }}">Map</a>
     <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('debug_view') }}">Debug</a>
@@ -89,6 +89,35 @@
     }
     refresh();
     setInterval(refresh, 5000);
+  })();
+</script>
+<script>
+  // Tint the Broadcast navbar button red when new broadcast messages
+  // have arrived since the user last viewed the Broadcast page.
+  (function () {
+    var btn = document.getElementById('broadcastNavBtn');
+    if (!btn) return;
+    function refreshBroadcast() {
+      fetch('/api/broadcast_unread', { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : { unread: 0 }; })
+        .then(function (j) {
+          var n = (j && typeof j.unread === 'number') ? j.unread : 0;
+          if (n > 0) {
+            btn.classList.remove('btn-outline-primary');
+            btn.classList.add('btn-outline-danger');
+            btn.setAttribute('title',
+              n === 1 ? '1 new broadcast since last visit'
+                      : (n + ' new broadcasts since last visit'));
+          } else {
+            btn.classList.remove('btn-outline-danger');
+            btn.classList.add('btn-outline-primary');
+            btn.removeAttribute('title');
+          }
+        })
+        .catch(function () { /* keep prior state on transient error */ });
+    }
+    refreshBroadcast();
+    setInterval(refreshBroadcast, 5000);
   })();
 </script>
 </body>

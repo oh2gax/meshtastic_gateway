@@ -66,6 +66,8 @@ The gateway performs lightweight schema migrations automatically on startup, so 
 
 There is also a global **Theme** toggle in the navbar (light / dark) and a **New message** indicator that shows in the top right when there are unread direct messages.
 
+All timestamps in the UI are in **UTC**. The `UTC` suffix is omitted from the displayed strings for compactness, so a row that reads `2026-05-01 11:44:50` is `2026-05-01 11:44:50 UTC` under the hood.
+
 See `Meshtastic_Gateway.pdf` for a UI overview and screenshots.
 
 

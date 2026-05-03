@@ -30,7 +30,7 @@
       <tbody>
       {% for r in rows %}
         <tr>
-          <td class="mono">{{ r["created_ts_iso"] }}</td>
+          <td class="mono">{{ r["created_ts_iso"]|replace(" UTC", "") }}</td>
           <td>
             {% if r["to_id"] %}
               {{ node_display(r["to_long"], r["to_short"], r["to_id"]) }}{% if r["to_long"] or r["to_short"] %} <span class="small text-muted mono">{{ r["to_id"] }}</span>{% endif %}

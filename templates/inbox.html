@@ -37,7 +37,7 @@
         <tr {% if unread %}class="unread-row"{% endif %}>
           <td class="mono">
             {% if unread %}<span class="unread-dot" title="Unread"></span>{% endif %}
-            {{ r["ts_iso"] }}
+            {{ r["ts_iso"]|replace(" UTC", "") }}
           </td>
           <td>
             {{ node_display(r["from_long"], r["from_short"], r["from_id"]) }}{% if r["from_long"] or r["from_short"] %} <span class="small text-muted mono">{{ r["from_id"] }}</span>{% endif %}{% if r["hops"] is not none %} <span class="small text-muted">&middot; Hops {{ r["hops"] }}</span>{% endif %}

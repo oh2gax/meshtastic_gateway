@@ -1,5 +1,4 @@
 # meshtastic_gateway
-<<<<<<< HEAD
 
 Web-based Meshtastic messaging, mapping & debugging application.
 
@@ -386,6 +385,3 @@ The web UI has no authentication by default. If exposed beyond your LAN, put it 
 This project is released under the **MIT License** — you're free to use, copy, modify, distribute, and reuse the code, including in commercial projects, as long as the original copyright notice and the license text are included with substantial portions of the code. The full license text is in the [`LICENSE`](LICENSE) file at the repository root.
 
 If you build something interesting on top of it, a quick note (or a star on the repo) is appreciated but not required. 73 — Otso, OH2GAX.
-=======
-Meshtastic client and gateway for Heltec V3&amp;V4 devices.
->>>>>>> 8d131f47d89594ee7bdec70610fdb10a9267d91b

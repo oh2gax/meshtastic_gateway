@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endblock %}
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="m-0">Map <span class="chip mono">window={{window}}</span></h5>
+      <div class="d-flex gap-2 align-items-center smallish">
+        <div>
+          <a href="{{ url_for('map_view', window='2h') }}">2h</a> |
+          <a href="{{ url_for('map_view', window='6h') }}">6h</a> |
+          <a href="{{ url_for('map_view', window='1d') }}">1d</a> |
+          <a href="{{ url_for('map_view', window='1w') }}">1w</a> |
+          <a href="{{ url_for('map_view', window='1m') }}">1m</a>
+        </div>
+        <div class="text-muted">Markers: <span id="markerCount">{{ rows|length }}</span></div>
+      </div>
+    </div>
+
+    <div class="row g-2">
+      <div class="col-md-3">
+        <div class="card">
+          <div class="card-body sidebar p-2">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div class="small text-muted">Nodes (click to zoom)</div>
+              <button class="btn btn-sm btn-outline-secondary" id="clearTracksBtn">Clear tracks</button>
+            </div>
+            <div id="nodeList"></div>
+          </div>
+        </div>
+        <div class="small text-muted mt-2">
+          Refresh:
+          <select id="mapRate" class="form-select form-select-sm d-inline-block" style="width: auto;">
+            <option value="2">2s</option>
+            <option value="5" selected>5s</option>
+            <option value="10">10s</option>
+          </select>
+          · Track points:
+          <input id="trackN" type="number" min="5" max="2000" value="{{ track_n }}"
+                 class="form-control form-control-sm d-inline-block" style="width: 90px;">
+        </div>
+      </div>
+
+      <div class="col-md-9">
+        <div id="map" style="height: 70vh; border-radius: 12px; border: 1px solid #ddd;"></div>
+      </div>
+    </div>
+
+    <script>
+      const map = L.map('map').setView([{{ center_lat }}, {{ center_lon }}], {{ 12 if rows|length else 10 }});
+
+      // Theme-aware tile layers: standard OSM for light, CARTO Dark Matter for dark.
+      const lightTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      });
+      // CARTO now requires an API key on raster tile requests (otherwise a
+      // watermark is shown). Key is injected server-side from CARTO_API_KEY
+      // in gateway_web_stable.py -- see https://carto.com/basemaps/apikey
+      const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key={{ carto_api_key }}', {
+        maxZoom: 19,
+        subdomains: 'abcd',
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+      });
+
+      function applyThemeTiles() {
+        const dark = (document.documentElement.getAttribute('data-bs-theme') === 'dark');
+        if (dark) {
+          if (map.hasLayer(lightTiles)) map.removeLayer(lightTiles);
+          if (!map.hasLayer(darkTiles)) darkTiles.addTo(map);
+        } else {
+          if (map.hasLayer(darkTiles)) map.removeLayer(darkTiles);
+          if (!map.hasLayer(lightTiles)) lightTiles.addTo(map);
+        }
+      }
+      applyThemeTiles();
+
+      // Swap tiles live when the Theme button toggles data-bs-theme.
+      new MutationObserver(applyThemeTiles).observe(
+        document.documentElement,
+        { attributes: true, attributeFilter: ['data-bs-theme'] }
+      );
+
+      const markerLayer = L.layerGroup().addTo(map);
+      const trackLayer = L.layerGroup().addTo(map);
+
+      const markers = new Map(); // node_id -> marker
+      let selectedTracks = new Set(); // node_id's with tracks enabled
+
+      function popupHtml(n) {
+        const lat = n.lat, lon = n.lon;
+        const hopsStr = (n.hops != null) ? `${n.hops}` : "—";
+        return `
+          <div style="min-width: 220px">
+            <div><b>${n.name}</b> <span class="mono" style="color:#666">${n.node_id}</span></div>
+            <div class="mono" style="font-size:12px; color:#666">${n.hw || ""}</div>
+            <hr style="margin:6px 0">
+            <div><b>Last seen:</b> ${n.last_seen || ""}</div>
+            <div><b>Pos time:</b> ${n.pos_time || ""}</div>
+            <div><b>RSSI/SNR:</b> ${n.rssi ?? ""} / ${n.snr ?? ""}</div>
+            <div><b>Lat/Lon:</b> ${lat.toFixed(5)}, ${lon.toFixed(5)}</div>
+            <div><b>Hops:</b> ${hopsStr}</div>
+          </div>
+        `;
+      }
+
+      function setNodeList(nodes) {
+        const el = document.getElementById("nodeList");
+        el.innerHTML = "";
+        for (const n of nodes) {
+          const item = document.createElement("div");
+          item.className = "p-2 rounded nodeitem";
+
+          const checked = selectedTracks.has(n.node_id) ? "checked" : "";
+          const distStr = (n.distance_km != null) ? ` · ${Number(n.distance_km).toFixed(1)} km` : "";
+          const hopsStr = (n.hops != null) ? ` · Hops ${n.hops}` : "";
+          item.innerHTML = `
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div>
+                <div><b>${n.name}</b></div>
+                <div class="small text-muted mono">${n.node_id}${hopsStr}</div>
+                <div class="small text-muted mono">RSSI ${n.rssi ?? ""} · SNR ${n.snr ?? ""}${distStr}</div>
+              </div>
+              <div class="text-end">
+                <label class="small text-muted">
+                  <input type="checkbox" class="trackBox" data-node="${n.node_id}" ${checked}>
+                  track
+                </label>
+              </div>
+            </div>
+          `;
+
+          item.addEventListener("click", (ev) => {
+            if (ev.target && ev.target.classList && ev.target.classList.contains("trackBox")) return;
+            map.setView([n.lat, n.lon], 15);
+            const m = markers.get(n.node_id);
+            if (m) m.openPopup();
+          });
+
+          el.appendChild(item);
+        }
+
+        for (const cb of document.querySelectorAll(".trackBox")) {
+          cb.addEventListener("change", () => {
+            const nodeId = cb.getAttribute("data-node");
+            if (!nodeId) return;
+            if (cb.checked) selectedTracks.add(nodeId);
+            else selectedTracks.delete(nodeId);
+            refreshTracks();
+          });
+        }
+      }
+
+      async function refreshMarkersAndList() {
+        const res = await fetch("/map/data?window={{ window }}", {cache:"no-store"});
+        const data = await res.json();
+        document.getElementById("markerCount").textContent = data.nodes.length.toString();
+
+        setNodeList(data.nodes);
+
+        markerLayer.clearLayers();
+        for (const n of data.nodes) {
+          const fill   = n.recent ? "#22c55e" : "#3b82f6";
+          const stroke = n.recent ? "#15803d" : "#1d4ed8";
+          let m = markers.get(n.node_id);
+          if (!m) {
+            m = L.circleMarker([n.lat, n.lon], {
+              radius: 8,
+              fillColor: fill,
+              color: stroke,
+              weight: 2,
+              opacity: 1,
+              fillOpacity: 0.85
+            });
+            markers.set(n.node_id, m);
+          } else {
+            m.setLatLng([n.lat, n.lon]);
+            m.setStyle({ fillColor: fill, color: stroke });
+          }
+          m.bindPopup(popupHtml(n));
+          var tipText = (n.short && n.short.length) ? n.short : (n.name || n.node_id || "");
+          if (tipText) {
+            m.bindTooltip(tipText, { direction: "top", offset: [0, -8] });
+          }
+          m.addTo(markerLayer);
+        }
+
+        await refreshTracks();
+      }
+
+      async function refreshTracks() {
+        trackLayer.clearLayers();
+        if (selectedTracks.size === 0) return;
+
+        const trackN = document.getElementById("trackN").value || "{{ track_n }}";
+        const ids = Array.from(selectedTracks).join(",");
+        const qs = new URLSearchParams({ ids, n: trackN });
+        const res = await fetch("/map/tracks?" + qs.toString(), {cache:"no-store"});
+        const data = await res.json();
+
+        for (const [nodeId, pts] of Object.entries(data.tracks || {})) {
+          if (!pts || pts.length < 2) continue;
+          L.polyline(pts, {weight: 3}).addTo(trackLayer);
+        }
+      }
+
+      let timer = null;
+      function setTimer() {
+        if (timer) clearInterval(timer);
+        const rateMs = parseInt(document.getElementById("mapRate").value || "5", 10) * 1000;
+        timer = setInterval(refreshMarkersAndList, rateMs);
+      }
+      document.getElementById("mapRate").addEventListener("change", setTimer);
+      document.getElementById("clearTracksBtn").addEventListener("click", () => {
+        selectedTracks = new Set();
+        refreshTracks();
+        refreshMarkersAndList();
+      });
+
+      setTimer();
+      refreshMarkersAndList();
+    </script>
+{% endblock %}

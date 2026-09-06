@@ -1,0 +1,14 @@
+"""
+api_keys.py.example -- template for the local api_keys.py file.
+
+Copy this file to api_keys.py (same folder) and fill in your own key(s).
+api_keys.py itself is gitignored, so your real keys are never committed or
+pushed to GitHub -- you can pull/push this repo freely without having to
+scrub secrets out of gateway_web_stable.py first.
+
+Add any future API keys the same way: one "NAME_API_KEY = \"...\"" line each.
+"""
+
+# CARTO Basemaps API key, used for the dark-mode map tiles (see templates/map.html).
+# Get a free key at https://carto.com/basemaps/apikey
+CARTO_API_KEY = ""

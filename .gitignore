@@ -1,0 +1,8 @@
+# Local secrets -- never push real API keys to GitHub.
+# Copy api_keys.py.example to api_keys.py and fill in your own key(s).
+api_keys.py
+
+# Python
+__pycache__/
+*.pyc
+venv/

@@ -47,7 +47,7 @@
       <a id="newMsgBadge" href="{{ url_for('inbox') }}"
          class="btn btn-danger btn-sm rounded-pill" style="display:none;"
          title="You have unread direct messages">
-        <i class="bi bi-envelope-fill"></i> <span id="newMsgText">New message</span>
+        <i class="bi bi-envelope-fill"></i> <span id="newMsgText">1 new</span>
       </a>
       <button type="button" class="btn btn-outline-secondary btn-sm mg-icon-btn position-relative" id="whatsNewBtn"
               data-version="{{ app_version }}" title="What's new{% if app_version %} in {{ app_version }}{% endif %}">
@@ -102,6 +102,7 @@
       <div class="modal-header">
         <ul class="nav nav-pills nav-sm" role="tablist">
           <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#wnPane" type="button" role="tab" id="wnTitle"><i class="bi bi-stars"></i> What's new</button></li>
+          <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#guidesPane" type="button" role="tab" id="guidesTab"><i class="bi bi-journal-text"></i> Guides</button></li>
           <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#aboutPane" type="button" role="tab"><i class="bi bi-info-circle"></i> About</button></li>
         </ul>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -109,6 +110,9 @@
       <div class="modal-body">
         <div class="tab-content">
           <div class="tab-pane fade show active" id="wnPane" role="tabpanel">
+            <div class="text-body-secondary small">Loading…</div>
+          </div>
+          <div class="tab-pane fade" id="guidesPane" role="tabpanel">
             <div class="text-body-secondary small">Loading…</div>
           </div>
           <div class="tab-pane fade" id="aboutPane" role="tabpanel">
@@ -178,6 +182,34 @@
         })
         .catch(function () { pane.innerHTML = '<div class="text-danger">The notes could not be loaded.</div>'; });
     }
+    // Guides: PDF documents in doc/ (doc/guides.json gives titles and descriptions).
+    var guidesLoaded = false;
+    function loadGuides() {
+      if (guidesLoaded) return;
+      var pane = document.getElementById('guidesPane');
+      fetch('/api/guides', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          guidesLoaded = true;
+          var list = d.guides || [];
+          if (!list.length) { pane.innerHTML = '<div class="text-body-secondary">No guides yet. PDF documents placed in the doc folder appear here.</div>'; return; }
+          var h = '<div class="small text-body-secondary mb-3">Guides and documents for this gateway</div>';
+          list.forEach(function (g) {
+            var url = '/doc/' + encodeURIComponent(g.file);
+            var meta = [g.date, 'PDF', g.size_kb + ' kB'].filter(Boolean).join(' · ');
+            h += '<div class="gd-item"><div class="gd-title"><i class="bi bi-file-earmark-pdf"></i> ' + esc(g.title) + '</div>' +
+                 (g.description ? '<div class="gd-desc">' + esc(g.description) + '</div>' : '') +
+                 '<div class="gd-meta">' + esc(meta) + '</div>' +
+                 '<div class="gd-links"><a class="btn btn-sm btn-primary" href="' + url + '" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> Open</a>' +
+                 '<a class="btn btn-sm btn-outline-secondary" href="' + url + '" download><i class="bi bi-download"></i> Download</a></div></div>';
+          });
+          pane.innerHTML = h;
+        })
+        .catch(function () { pane.innerHTML = '<div class="text-danger">The guides could not be loaded.</div>'; });
+    }
+    var gt = document.getElementById('guidesTab');
+    if (gt) gt.addEventListener('shown.bs.tab', loadGuides);
+
     var modal = new bootstrap.Modal(modalEl);
     function open(ev) {
       if (ev) ev.preventDefault();
@@ -276,7 +308,8 @@
         .then(function (j) {
           var n = (j && typeof j.unread === 'number') ? j.unread : 0;
           if (n > 0) {
-            label.textContent = (n === 1) ? 'New message' : ('New messages (' + n + ')');
+            label.textContent = n + ' new';
+            badge.title = (n === 1) ? '1 unread direct message' : (n + ' unread direct messages');
             badge.style.display = '';
           } else {
             badge.style.display = 'none';

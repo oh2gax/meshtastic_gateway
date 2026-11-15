@@ -16,3 +16,11 @@ meshtastic_messages.db-shm
 __pycache__/
 *.pyc
 venv/
+
+# LaTeX build files of the user guide, and the temporary demo database
+doc/src/*.aux
+doc/src/*.log
+doc/src/*.out
+doc/src/*.toc
+doc/src/user_guide.pdf
+doc/src/demo_guide.db*

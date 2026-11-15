@@ -71,6 +71,15 @@ All timestamps in the UI are in **UTC**. The `UTC` suffix is omitted from the di
 See `Meshtastic_Gateway.pdf` for a UI overview and screenshots.
 
 
+## Documentation
+
+- **User guide** — [`doc/Meshtastic_Gateway_User_Guide.pdf`](doc/Meshtastic_Gateway_User_Guide.pdf): every page explained with screenshots, the delivery marks, the services, running on a Raspberry Pi and a quick reference. It is also listed in the web UI under ✨ → *Guides*.
+- **What's new** — [`doc/whats_new.md`](doc/whats_new.md), short notes per version (shown in the web UI under ✨).
+- **Changelog** — [`CHANGELOG.md`](CHANGELOG.md), the technical history.
+
+To rebuild the guide: `python3 doc/src/guide_shots.py` (needs `pip install playwright` and `playwright install chromium`; makes the screenshots from an invented demo database), then `cd doc/src && pdflatex user_guide.tex` three times, and copy `user_guide.pdf` to `doc/Meshtastic_Gateway_User_Guide.pdf`. PDFs placed in `doc/` appear under *Guides*; `doc/guides.json` gives their titles and descriptions.
+
+
 ## Requirements
 
 - Raspberry Pi OS (or Debian / Ubuntu)

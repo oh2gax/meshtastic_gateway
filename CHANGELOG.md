@@ -19,7 +19,13 @@ User-facing notes are in `doc/whats_new.md` (shown in the What's new window).
   (testable without network).
 - **What's new window** — `doc/whats_new.md` (WSPR Logger format), `/api/whatsnew`, ✨ button with the
   version badge (`v.DDMMYYYY` of the newest heading) and an unseen dot (`localStorage['mg-seen-version']`);
-  What's new / About tabs.
+  What's new / Guides / About tabs.
+- **Guides** — `/api/guides` and `/doc/<name>` (plain `*.pdf` names in `doc/` only), titles and
+  descriptions from `doc/guides.json`; same logic as WSPR Logger's `core/guides.py`.
+- **User guide** — `doc/Meshtastic_Gateway_User_Guide.pdf` (15 pages), LaTeX source
+  `doc/src/user_guide.tex` in the WSPR Logger guide style. Screenshots in `doc/src/guide_img/` are made by
+  `doc/src/guide_shots.py` from an invented demo database (never the real one) with a Natural Earth
+  coastline instead of map tiles.
 - **`update.sh`** — fetch, stop service, back up DB + `api_keys.py` + `local_config.py` to
   `~/meshtastic_backups/` (keep 5), `git reset --hard origin/main`, restore DB, pip install when
   `requirements.txt` changed (or `--deps`), `ast` check with automatic rollback, start, show log.
@@ -38,6 +44,8 @@ User-facing notes are in `doc/whats_new.md` (shown in the What's new window).
 - Map track length is minutes from **local** midnight (was UTC midnight).
 - `POSITION_KEEP_PER_NODE` 5000 → 2000 (the value `insert_position` actually allowed).
 - Database files are no longer tracked in git (`.gitignore`).
+- Unread-DM badge is compact (`✉ N new`); navbar collapses below 1200 px and hides its icons below
+  1600 px, so it never overflows.
 
 ### Fixed
 - **Reply could be sent as a broadcast** — `/send?to_id=` for a node outside the active window left the

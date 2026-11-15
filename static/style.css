@@ -63,8 +63,9 @@ main { flex: 1 0 auto; }
 }
 .mg-navbar .nav-link:hover { opacity: 1; background: var(--mg-surface-2); }
 .mg-navbar .nav-link { white-space: nowrap; }
-/* Between 1200 and 1400 px: drop the menu icons so all items fit on one line. */
-@media (min-width: 1200px) and (max-width: 1399.98px) {
+/* Between 1200 and 1600 px: drop the menu icons so all items fit on one line
+   (also with the unread-messages badge showing). */
+@media (min-width: 1200px) and (max-width: 1599.98px) {
   .mg-navbar .nav-link .bi { display: none; }
   .mg-navbar .nav-link { padding: .4rem .55rem !important; }
 }
@@ -197,3 +198,10 @@ pre.debugbox, .logbox {
 #whatsNewModal .nav-pills .nav-link.active { background: var(--mg-accent); }
 .about dt { font-weight: 600; font-size: .9rem; }
 .about dd { margin-bottom: .7rem; }
+/* Guides list */
+.gd-item { border: 1px solid var(--mg-border); border-radius: var(--mg-radius-sm); padding: .75rem .9rem; margin-bottom: .6rem; background: var(--mg-surface-2); }
+.gd-title { font-weight: 650; }
+.gd-title .bi { color: #dc3545; }
+.gd-desc { font-size: .9rem; margin-top: .2rem; }
+.gd-meta { font-size: .78rem; color: var(--mg-muted); margin-top: .25rem; }
+.gd-links { display: flex; gap: .4rem; margin-top: .5rem; }

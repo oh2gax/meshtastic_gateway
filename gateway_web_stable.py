@@ -46,7 +46,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, List, Tuple
 
-from flask import Flask, request, redirect, url_for, render_template, jsonify
+from flask import Flask, request, redirect, url_for, render_template, jsonify, abort, send_from_directory
 from meshtastic.tcp_interface import TCPInterface
 from pubsub import pub
 
@@ -2347,6 +2347,50 @@ def load_whats_new(limit: int = 10) -> Dict[str, Any]:
 APP_VERSION = load_whats_new(1).get("version", "")
 
 # -------------------------
+# Guides (PDF documents in doc/)
+# -------------------------
+# Same as WSPR Logger: the optional manifest doc/guides.json gives each PDF a
+# title, a short description and a date (and sets the order); a PDF that is not
+# in the manifest is still listed, titled from its file name. Only plain *.pdf
+# names directly inside doc/ are ever served.
+DOC_DIR = os.path.dirname(WHATS_NEW_PATH)
+_GUIDE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.pdf$")
+
+
+def is_safe_guide_name(name: str) -> bool:
+    return bool(name) and bool(_GUIDE_NAME.match(name)) and ".." not in name
+
+
+def list_guides(doc_dir: str = DOC_DIR) -> List[Dict[str, Any]]:
+    manifest: List[Dict[str, Any]] = []
+    try:
+        with open(os.path.join(doc_dir, "guides.json"), encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, list):
+            manifest = [g for g in data if isinstance(g, dict) and isinstance(g.get("file"), str)]
+    except (OSError, ValueError):
+        pass
+    meta = {g["file"]: g for g in manifest}
+    try:
+        present = {n for n in os.listdir(doc_dir)
+                   if is_safe_guide_name(n) and os.path.isfile(os.path.join(doc_dir, n))}
+    except OSError:
+        return []
+    ordered = [g["file"] for g in manifest if g["file"] in present]
+    ordered += sorted(present - set(ordered))
+    out = []
+    for name in ordered:
+        m = meta.get(name, {})
+        out.append({
+            "file": name,
+            "title": str(m.get("title") or name[:-4].replace("_", " ")),
+            "description": str(m.get("description") or ""),
+            "date": str(m.get("date") or ""),
+            "size_kb": round(os.path.getsize(os.path.join(doc_dir, name)) / 1024),
+        })
+    return out
+
+# -------------------------
 # Flask app
 # -------------------------
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -2397,6 +2441,20 @@ def api_unread_count():
 def api_whatsnew():
     """Version label and the newest notes, read from doc/whats_new.md."""
     return jsonify(load_whats_new(limit=10))
+
+
+@app.get("/api/guides")
+def api_guides():
+    """The PDF documents in doc/ (titles and descriptions from doc/guides.json)."""
+    return jsonify({"guides": list_guides()})
+
+
+@app.get("/doc/<name>")
+def serve_doc(name: str):
+    """Serve one PDF from doc/ (plain *.pdf file names only)."""
+    if not is_safe_guide_name(name):
+        abort(404)
+    return send_from_directory(DOC_DIR, name, mimetype="application/pdf")
 
 
 @app.get("/api/broadcast_unread")

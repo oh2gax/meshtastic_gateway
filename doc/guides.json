@@ -1,0 +1,8 @@
+[
+  {
+    "file": "Meshtastic_Gateway_User_Guide.pdf",
+    "title": "Meshtastic Gateway – User guide",
+    "description": "How to read and use the web page: Meshtastic in a nutshell, how the gateway works, every page (Active Nodes, Inbox, Outbox and the Y / S / … / — ACK marks, Chat, Broadcast, Send, Map, Services with wx / taf / cmd solar / cmd wspr, Status and maintenance, Debug), What's new and Guides, running on a Raspberry Pi with update.sh, limitations and a quick reference.",
+    "date": "2026-11-15"
+  }
+]

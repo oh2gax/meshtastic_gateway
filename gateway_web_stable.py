@@ -33,6 +33,7 @@ Folder layout (keep together):
 
 import json
 import math
+import os
 import queue
 import sqlite3
 import time
@@ -73,6 +74,11 @@ except ImportError:
           "(https://carto.com/basemaps/apikey), otherwise the dark map "
           "tiles will show a CARTO 'API key required' watermark.")
 
+# WSPR Logger (https://github.com/oh2gax/wspr_logger) used by the "cmd wspr"
+# service. Its public JSON API is read: /api/latest and /api/typical_day.
+WSPR_API_BASE = "https://wspr.oh2gax.org"
+WSPR_TYPICAL_DAYS = 7          # "typical day" window for the comparison (7, 14, 30, 90)
+
 WEB_HOST = "0.0.0.0"
 WEB_PORT = 8000
 
@@ -82,7 +88,7 @@ WEB_PORT = 8000
 # new versions from GitHub without clashing with local edits.
 try:
     import local_config as _local_config  # type: ignore
-    for _k in ("HOST", "DB_PATH", "WEB_HOST", "WEB_PORT"):
+    for _k in ("HOST", "DB_PATH", "WEB_HOST", "WEB_PORT", "WSPR_API_BASE", "WSPR_TYPICAL_DAYS"):
         if hasattr(_local_config, _k):
             globals()[_k] = getattr(_local_config, _k)
     print(f"[config] local_config.py loaded (HOST={HOST}, WEB_PORT={WEB_PORT})")
@@ -310,6 +316,7 @@ SERVICE_COMMANDS = (
     (re.compile(r"^\s*wx\s+([A-Za-z]{4})\s*$", re.IGNORECASE), "metar"),  # "wx EFHK"
     (re.compile(r"^\s*taf\s+([A-Za-z]{4})\s*$", re.IGNORECASE), "taf"),   # "taf EFHK"
     (re.compile(r"^\s*cmd\s+solar\s*$", re.IGNORECASE), "solar"),         # "cmd solar"
+    (re.compile(r"^\s*cmd\s+wspr\s*$", re.IGNORECASE), "wspr"),           # "cmd wspr"
 )
 SERVICE_COMMAND_PATTERNS = tuple(p for p, _ in SERVICE_COMMANDS)
 
@@ -480,6 +487,153 @@ def compact_solar(data: Optional[Dict[str, str]]) -> str:
     return s
 
 
+WSPR_MAX_LEN = 220
+_WSPR_BANDS = {1: "160m", 3: "80m", 5: "60m", 7: "40m", 10: "30m", 14: "20m",
+               18: "17m", 21: "15m", 24: "12m", 28: "10m", 50: "6m"}
+
+
+def _http_get_json(url: str, timeout_sec: int = 10) -> Optional[Any]:
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "MeshtasticGateway/1.0"})
+        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+            return json.loads(resp.read().decode("utf-8", errors="replace"))
+    except Exception:
+        return None
+
+
+def _n(v: Any) -> str:
+    """Compact whole number for the reply: 118.5 -> "118"."""
+    try:
+        return str(int(round(float(v))))
+    except Exception:
+        return "?"
+
+
+def wspr_compare(live_n: Optional[float], prof_hour: Optional[Dict[str, Any]]) -> Optional[Tuple[str, Dict[str, Any]]]:
+    """Compare the live reporter count with one hour of the typical-day profile.
+    ABOVE > p75, BELOW < p25, else SAME; a difference smaller than
+    max(2, sqrt(median)) also counts as SAME (small numbers at night), the
+    same rule WSPR Logger uses for its own verdict."""
+    if live_n is None or not isinstance(prof_hour, dict):
+        return None
+    med, p25, p75 = prof_hour.get("median"), prof_hour.get("p25"), prof_hour.get("p75")
+    if med is None or p25 is None or p75 is None:
+        return None
+    if live_n > p75:
+        v = "ABOVE"
+    elif live_n < p25:
+        v = "BELOW"
+    else:
+        v = "SAME"
+    if v != "SAME" and abs(live_n - med) < max(2.0, math.sqrt(max(float(med), 1.0))):
+        v = "SAME"
+    return v, {"median": med, "p25": p25, "p75": p75}
+
+
+def wspr_condition(n: Optional[float]) -> str:
+    """Propagation level from the number of reporters, same scale as the
+    WSPR Logger Propagation card (getPropCondition in static/js/live.js)."""
+    n = n or 0
+    if n <= 5:
+        return "Very low"
+    if n <= 10:
+        return "Low"
+    if n <= 20:
+        return "Normal"
+    if n <= 40:
+        return "Good"
+    if n <= 60:
+        return "Very good"
+    if n <= 100:
+        return "Extremely good"
+    return "Exceptional"
+
+
+def build_wspr_reply(latest: Optional[Dict[str, Any]], typical: Optional[Dict[str, Any]],
+                     now: Optional[datetime] = None, days: int = 7) -> str:
+    """One-packet WSPR propagation summary from WSPR Logger's /api/latest and
+    /api/typical_day JSON. Follows the WSPR Logger Propagation card:
+      - wspr.live down             -> "wspr.live unreachable"
+      - no spot within 60 minutes  -> "No propagation" ("... or TX Fail" when
+                                      the band is usually open at this hour)
+      - otherwise                  -> level (Very low .. Exceptional, "& DX"
+                                      with 2+ stations beyond 6000 km), the
+                                      60-minute count and the comparison with
+                                      the typical day.
+    Pure function (no network) so it can be tested."""
+    if not isinstance(latest, dict):
+        return "WSPR data unavailable"
+    now = now or datetime.now(timezone.utc)
+    hhmm = now.strftime("%H:%MZ")
+    spot = latest.get("spot") or {}
+    prop = latest.get("prop") or {}
+    band = _WSPR_BANDS.get(spot.get("band"), f"{spot.get('band')}MHz" if spot.get("band") else "")
+    head = " ".join(f"WSPR {band} {hhmm}:".split())
+    muf = latest.get("muf")
+    muf_s = f" MUF {float(muf):.1f}" if isinstance(muf, (int, float)) else ""
+
+    def done(text: str) -> str:
+        text = " ".join(text.split())
+        return text if len(text) <= WSPR_MAX_LEN else text[:WSPR_MAX_LEN].rstrip() + "…"
+
+    if latest.get("wspr_down"):
+        return done(f"{head} wspr.live unreachable, no live data.{muf_s}")
+
+    ts = spot.get("timestamp") or ""
+    age_min = None
+    try:
+        t = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        age_min = (now - t).total_seconds() / 60.0
+    except Exception:
+        pass
+    loc = spot.get("tx_loc") or ""
+    live_n = prop.get("live_n")
+    n = live_n if isinstance(live_n, (int, float)) else spot.get("reporter_count")
+
+    # Nobody has heard the transmitter in the last hour (same 1 h rule as the
+    # WSPR Logger page): "No propagation", or "... or TX Fail" when the band
+    # is normally open at this hour.
+    if age_min is None or age_min > 60 or not n:
+        suspect = bool(prop.get("tx_suspect") or prop.get("busy_now"))
+        state = "No propagation or TX Fail" if suspect else "No propagation"
+        last = ""
+        if ts:
+            last = (f" Last spot {ts[11:16]}Z {loc} {spot.get('reporter_count', '?')} rptr"
+                    f" DX {spot.get('max_distance', '?')}km.")
+        usual = prop.get("usual_now")
+        usual_s = f" Usually {_n(usual)} rptr now." if suspect and isinstance(usual, (int, float)) and usual > 0 else ""
+        return done(f"{head} {state}.{last}{usual_s}{muf_s}")
+
+    dx6 = latest.get("dx6") if isinstance(latest.get("dx6"), int) else 0
+    level = wspr_condition(n) + (" & DX" if dx6 >= 2 else "")
+    dx_s = f" ({dx6} >6000km)" if dx6 else ""
+
+    if prop.get("tx_suspect"):
+        cmp_s = "no reports 20 min, TX off?"
+    elif prop.get("warming"):
+        cmp_s = "TX back on, compared after 1h"
+    else:
+        cmp_s = f"{days}d typ n/a"
+        prof = typical.get("profile") if isinstance(typical, dict) else None
+        if isinstance(prof, list) and len(prof) > now.hour:
+            c = wspr_compare(float(n), prof[now.hour])
+            if c:
+                v, r = c
+                cmp_s = f"{days}d typ {_n(r['median'])} ({_n(r['p25'])}-{_n(r['p75'])}) {v}"
+    return done(f"{head} {level}. {_n(n)} rptr/60m{dx_s}, {cmp_s}.{muf_s} Loc {loc}".replace("?.", "?"))
+
+
+def _reply_wspr(_query: str) -> str:
+    base = (WSPR_API_BASE or "").rstrip("/")
+    if not base:
+        return "WSPR service not configured"
+    latest = _http_get_json(f"{base}/api/latest")
+    if latest is None:
+        return "WSPR data unavailable"
+    typical = _http_get_json(f"{base}/api/typical_day?days={int(WSPR_TYPICAL_DAYS)}", timeout_sec=15)
+    return build_wspr_reply(latest, typical, days=int(WSPR_TYPICAL_DAYS))
+
+
 def _reply_metar(icao: str) -> str:
     m = fetch_metar_text(icao)
     return compact_metar(m, icao) if m else f"No METAR for {icao}"
@@ -499,6 +653,7 @@ SERVICE_REPLY_BUILDERS = {
     "metar": _reply_metar,
     "taf": _reply_taf,
     "solar": _reply_solar,
+    "wspr": _reply_wspr,
 }
 SERVICE_QUEUE_MAX = 50
 
@@ -2128,6 +2283,70 @@ class Gateway:
             pass
 
 # -------------------------
+# What's new (doc/whats_new.md)
+# -------------------------
+# Same format as WSPR Logger: short user notes, newest first, one section per
+# day of development:
+#     ## v.15112026 — A headline in a few words
+#     - **Short lead** — one or two sentences of what changed.
+# The newest heading is the version label. Technical history: CHANGELOG.md.
+WHATS_NEW_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "doc", "whats_new.md")
+_WN_HEAD = re.compile(r"^##\s+v\.(\d{2})(\d{2})(\d{4})\s*(?:[—–-]+\s*(.*))?$")
+_WN_LEAD = re.compile(r"^\*\*(.+?)\*\*\s*(?:[—–:-]+\s*)?(.*)$")
+
+
+def parse_whats_new(text: str) -> List[Dict[str, Any]]:
+    entries: List[Dict[str, Any]] = []
+    cur: Optional[Dict[str, Any]] = None
+    bullet: Optional[List[str]] = None
+
+    def flush() -> None:
+        nonlocal bullet
+        if bullet is not None and cur is not None:
+            t = " ".join(" ".join(bullet).split())
+            m = _WN_LEAD.match(t)
+            item = {"lead": m.group(1).strip(), "text": m.group(2).strip()} if m else {"lead": "", "text": t}
+            if item["lead"] or item["text"]:
+                cur["items"].append(item)
+        bullet = None
+
+    for line in text.splitlines():
+        h = _WN_HEAD.match(line)
+        if h:
+            flush()
+            dd, mm, yyyy, head = h.groups()
+            cur = {"date": f"{yyyy}-{mm}-{dd}", "version": f"v.{dd}{mm}{yyyy}",
+                   "headline": (head or "").strip(), "items": []}
+            entries.append(cur)
+            continue
+        if line.startswith("- "):
+            flush()
+            bullet = [line[2:]]
+        elif bullet is not None:
+            if line.startswith("  ") and line.strip():
+                bullet.append(line.strip())
+            else:
+                flush()
+    flush()
+    entries = [e for e in entries if e["items"]]
+    entries.sort(key=lambda e: e["date"], reverse=True)
+    return entries
+
+
+def load_whats_new(limit: int = 10) -> Dict[str, Any]:
+    try:
+        with open(WHATS_NEW_PATH, encoding="utf-8") as fh:
+            entries = parse_whats_new(fh.read())
+    except OSError:
+        entries = []
+    if not entries:
+        return {"version": "", "latest": "", "entries": []}
+    return {"version": entries[0]["version"], "latest": entries[0]["date"], "entries": entries[:limit]}
+
+
+APP_VERSION = load_whats_new(1).get("version", "")
+
+# -------------------------
 # Flask app
 # -------------------------
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -2140,6 +2359,7 @@ gateway = Gateway(HOST, DB_CONN)
 # Make helper available in templates
 app.jinja_env.globals["node_display"] = node_display
 app.jinja_env.globals["iso_utc"] = iso_utc
+app.jinja_env.globals["app_version"] = APP_VERSION
 
 # -------------------------
 # Routes
@@ -2171,6 +2391,12 @@ def api_unread_count():
     except Exception:
         n = 0
     return {"unread": n}
+
+
+@app.get("/api/whatsnew")
+def api_whatsnew():
+    """Version label and the newest notes, read from doc/whats_new.md."""
+    return jsonify(load_whats_new(limit=10))
 
 
 @app.get("/api/broadcast_unread")
@@ -2511,7 +2737,7 @@ def services_view():
             cur.execute("""
                 SELECT ts_iso, service, from_id, query, status, note
                 FROM service_log
-                WHERE service IN ('metar', 'taf', 'solar')
+                WHERE service IN ('metar', 'taf', 'solar', 'wspr')
                 ORDER BY ts DESC LIMIT 50
             """)
             metar_log = cur.fetchall()

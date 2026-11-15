@@ -36,19 +36,23 @@
   ('status_view',   'Status',       'bi-activity',     ['status_view']),
   ('services_view', 'Services',     'bi-cloud-sun',    ['services_view']),
 ] %}
-<nav class="navbar navbar-expand-lg sticky-top mg-navbar">
+<nav class="navbar navbar-expand-xl sticky-top mg-navbar">
   <div class="container-xl">
     <a class="navbar-brand" href="{{ url_for('nodes') }}">
       <span class="mg-logo"><i class="bi bi-broadcast-pin"></i></span>
-      <span>Meshtastic Gateway</span>
+      <span class="d-none d-sm-inline">Meshtastic Gateway</span><span class="d-sm-none">Gateway</span>
     </a>
 
-    <div class="d-flex align-items-center gap-2 order-lg-last ms-auto ms-lg-2">
+    <div class="d-flex align-items-center gap-2 order-xl-last ms-auto ms-xl-2">
       <a id="newMsgBadge" href="{{ url_for('inbox') }}"
          class="btn btn-danger btn-sm rounded-pill" style="display:none;"
          title="You have unread direct messages">
         <i class="bi bi-envelope-fill"></i> <span id="newMsgText">New message</span>
       </a>
+      <button type="button" class="btn btn-outline-secondary btn-sm mg-icon-btn position-relative" id="whatsNewBtn"
+              data-version="{{ app_version }}" title="What's new{% if app_version %} in {{ app_version }}{% endif %}">
+        <i class="bi bi-stars"></i><span class="wn-dot" id="whatsNewDot" style="display:none;"></span>
+      </button>
       <button type="button" class="btn btn-outline-secondary btn-sm mg-icon-btn" id="themeToggle" title="Toggle dark/light theme">
         <i class="bi bi-moon-stars" id="themeIcon"></i>
       </button>
@@ -62,7 +66,7 @@
     </div>
 
     <div class="collapse navbar-collapse" id="mgNav">
-      <ul class="navbar-nav me-auto gap-lg-1 mt-2 mt-lg-0">
+      <ul class="navbar-nav me-auto gap-xl-1 mt-2 mt-xl-0">
         {% for endpoint, label, icon, actives in nav_items %}
           <li class="nav-item">
             <a class="nav-link {% if ep in actives %}active{% endif %}"
@@ -84,11 +88,111 @@
 <footer class="mg-footer">
   <div class="container-xl d-flex flex-wrap justify-content-between gap-2">
     <span><i class="bi bi-router"></i> TCP radio: <span class="mono">{{ host }}</span></span>
-    <span>All times UTC</span>
+    <span>
+      <a href="#" class="link-secondary text-decoration-none" id="footerWhatsNew"><i class="bi bi-stars"></i> Meshtastic Gateway {{ app_version }}</a>
+      &middot; All times UTC
+    </span>
   </div>
 </footer>
 
+<!-- What's new / About window -->
+<div class="modal fade" id="whatsNewModal" tabindex="-1" aria-labelledby="wnTitle" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <ul class="nav nav-pills nav-sm" role="tablist">
+          <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#wnPane" type="button" role="tab" id="wnTitle"><i class="bi bi-stars"></i> What's new</button></li>
+          <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#aboutPane" type="button" role="tab"><i class="bi bi-info-circle"></i> About</button></li>
+        </ul>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="tab-content">
+          <div class="tab-pane fade show active" id="wnPane" role="tabpanel">
+            <div class="text-body-secondary small">Loading…</div>
+          </div>
+          <div class="tab-pane fade" id="aboutPane" role="tabpanel">
+            <dl class="row about mb-0">
+              <dt class="col-sm-3">Operator</dt><dd class="col-sm-9">Otso Laakso / OH2GAX</dd>
+              <dt class="col-sm-3">Radio</dt><dd class="col-sm-9">Heltec V3 / V4 Meshtastic node over WiFi (TCP) at <span class="mono">{{ host }}</span></dd>
+              <dt class="col-sm-3">Software</dt><dd class="col-sm-9">Meshtastic Gateway {{ app_version }}<div class="small text-body-secondary">Python / Flask + SQLite, Meshtastic Python library</div></dd>
+              <dt class="col-sm-3">Services</dt><dd class="col-sm-9">METAR / TAF from NOAA TGFTP, solar data from hamqsl.com, WSPR propagation from the
+                <a href="https://wspr.oh2gax.org/" target="_blank" rel="noopener">OH2GAX WSPR Logger</a></dd>
+              <dt class="col-sm-3">Source code</dt><dd class="col-sm-9"><a href="https://github.com/oh2gax/meshtastic_gateway" target="_blank" rel="noopener">github.com/oh2gax/meshtastic_gateway</a> &middot; MIT License</dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // What's new: notes from doc/whats_new.md via /api/whatsnew. A red dot on the
+  // button until the current version has been opened (localStorage mg-seen-version).
+  (function () {
+    var btn = document.getElementById('whatsNewBtn');
+    var dot = document.getElementById('whatsNewDot');
+    var modalEl = document.getElementById('whatsNewModal');
+    if (!btn || !modalEl || !window.bootstrap) return;
+    var version = btn.getAttribute('data-version') || '';
+    var seen = null;
+    try { seen = localStorage.getItem('mg-seen-version'); } catch (e) {}
+    if (version && seen !== version) dot.style.display = '';
+
+    function esc(t) {
+      return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    // **bold**, *italic* and `code`; everything else plain text
+    function md(t) {
+      return esc(t)
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+        .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    }
+    var loaded = false;
+    function load() {
+      if (loaded) return;
+      var pane = document.getElementById('wnPane');
+      fetch('/api/whatsnew', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          loaded = true;
+          if (!d.entries || !d.entries.length) { pane.innerHTML = '<div class="text-body-secondary">No notes are available.</div>'; return; }
+          var h = '<div class="small text-body-secondary mb-3">Short notes for users, newest first. Each version is one day of development.</div>';
+          d.entries.forEach(function (e) {
+            var nice = new Date(e.date + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+            h += '<div class="wn-version"><span class="badge rounded-pill text-bg-primary">' + esc(e.version) + '</span>' +
+                 '<span class="small text-body-secondary">' + nice + '</span></div>';
+            if (e.headline) h += '<div class="wn-headline">' + md(e.headline) + '</div>';
+            h += '<ul class="wn-notes">' + e.items.map(function (i) {
+              return '<li>' + (i.lead ? '<b>' + md(i.lead) + '</b>' + (i.text ? ' &mdash; ' : '') : '') + md(i.text) + '</li>';
+            }).join('') + '</ul>';
+          });
+          h += '<div class="small text-body-secondary border-top pt-2 mt-3">The technical history is in CHANGELOG.md in the ' +
+               '<a href="https://github.com/oh2gax/meshtastic_gateway" target="_blank" rel="noopener">GitHub repository</a>.</div>';
+          pane.innerHTML = h;
+        })
+        .catch(function () { pane.innerHTML = '<div class="text-danger">The notes could not be loaded.</div>'; });
+    }
+    var modal = new bootstrap.Modal(modalEl);
+    function open(ev) {
+      if (ev) ev.preventDefault();
+      load();
+      modal.show();
+      if (version) {
+        try { localStorage.setItem('mg-seen-version', version); } catch (e) {}
+        dot.style.display = 'none';
+      }
+    }
+    btn.addEventListener('click', open);
+    var foot = document.getElementById('footerWhatsNew');
+    if (foot) foot.addEventListener('click', open);
+  })();
+</script>
 <script>
   // Theme toggle (persisted in localStorage['mg-theme']).
   (function () {

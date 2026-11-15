@@ -9,13 +9,16 @@
 
 <div class="card mb-3">
   <div class="card-body">
-    <div class="card-title-sm">METAR, TAF &amp; Solar weather service</div>
+    <div class="card-title-sm">METAR, TAF, Solar &amp; WSPR service</div>
     <p class="text-body-secondary mb-3">
       Reply with weather or propagation data when a node sends a private message:
       <code>wx efhk</code> for the current METAR,
       <code>taf efhk</code> for the latest TAF forecast (any ICAO airport),
-      or <code>cmd solar</code> for a compact solar/propagation summary
-      (SFI, SN, X, A, K, AU, BZE, SW, Pf, Ef) from hamqsl.com.
+      <code>cmd solar</code> for a compact solar/propagation summary
+      (SFI, SN, X, A, K, AU, BZE, SW, Pf, Ef) from hamqsl.com,
+      or <code>cmd wspr</code> for the current WSPR propagation from the
+      <a href="https://wspr.oh2gax.org/" target="_blank" rel="noopener">OH2GAX WSPR Logger</a>
+      (level, stations heard in the last 60 min, and ABOVE / SAME / BELOW the typical day of the last 7 days).
       TAF and solar replies are truncated to fit one Meshtastic packet;
       the trailing characters that don't fit are dropped
       (an <code>…</code> is appended).
@@ -43,7 +46,7 @@
 <div class="card">
   <div class="card-body">
     <div class="d-flex justify-content-between align-items-baseline mb-2">
-      <div class="card-title-sm mb-0">Latest METAR, TAF &amp; Solar requests</div>
+      <div class="card-title-sm mb-0">Latest service requests</div>
       <div class="small text-body-secondary">Last 50 requests (UTC)</div>
     </div>
     <div class="logbox">

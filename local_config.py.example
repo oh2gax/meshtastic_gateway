@@ -17,3 +17,7 @@ HOST = "192.168.1.197"
 
 # SQLite database file (created automatically on first start).
 # DB_PATH = "./meshtastic_messages.db"
+
+# WSPR Logger used by the "cmd wspr" service (public JSON API).
+# WSPR_API_BASE = "https://wspr.oh2gax.org"
+# WSPR_TYPICAL_DAYS = 7

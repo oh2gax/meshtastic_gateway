@@ -64,7 +64,7 @@ The gateway performs lightweight schema migrations automatically on startup, so 
 - **Services** — enable/disable the combined METAR / TAF / Solar service, configure the reply delay, and see the latest service-traffic log.
 - **Send** — compose a direct message or a broadcast. When opened via a *Reply* link the reply target is always pre-selected, even if that node hasn't been heard recently.
 
-There is also a global **Theme** toggle in the navbar (light / dark) and a **New message** indicator that shows in the top right when there are unread direct messages.
+There is also a global **Theme** toggle in the navbar (light / dark), a **New message** indicator that shows in the top right when there are unread direct messages, and a **✨ What's new** button that opens short notes about each version (from `doc/whats_new.md`) and an About tab. A red dot on the button means there are notes you haven't opened yet; the version (`v.DDMMYYYY`) is also shown in the footer. The technical history is in `CHANGELOG.md`.
 
 All timestamps in the UI are in **UTC**. The `UTC` suffix is omitted from the displayed strings for compactness, so a row that reads `2026-05-01 11:44:50` is `2026-05-01 11:44:50 UTC` under the hood.
 
@@ -267,18 +267,19 @@ This action is also subject to the same caveat as the unknown cleanup: a node th
 
 ### Services
 
-The Services page hosts a combined **METAR / TAF / Solar** weather and propagation service. A single Enabled/Disabled switch controls all three, and they share one reply-delay setting. Currently implemented commands (sent to the gateway as private direct messages):
+The Services page hosts a combined **METAR / TAF / Solar / WSPR** weather and propagation service. A single Enabled/Disabled switch controls all of them, and they share one reply-delay setting. Replies are prepared on a background thread, so fetching the data never holds up the radio. Currently implemented commands (sent to the gateway as private direct messages):
 
 - **`wx <ICAO>`** — replies with the latest METAR for that airport. Any four-letter ICAO code worldwide works (e.g. `wx efhk` for Helsinki-Vantaa, `wx kjfk` for JFK). Source: NOAA TGFTP.
 - **`taf <ICAO>`** — replies with the latest TAF (Terminal Aerodrome Forecast). The leading `TAF EFHK` keyword is stripped to save bytes (you already know the ICAO from your query) but the issuance timestamp (`ddhhmmZ`) is kept so you can see when the forecast was generated. Same source. TAF replies are truncated to fit one Meshtastic packet (~220 chars); trailing characters that don't fit are dropped and an `…` is appended.
 - **`cmd solar`** — replies with a compact one-line solar / propagation summary built from `hamqsl.com/solarxml.php`. The reply uses short labels in this order, omitting any field the source didn't report: `SFI` (10.7 cm flux), `SN` (sunspot number), `X` (X-ray class), `A` (A index), `K` (K index), `AU` (aurora), `BZE` (interplanetary magnetic field Bz), `SW` (solar wind, km/s), `Pf` (proton flux), `Ef` (electron flux). Example: `SFI 143 SN 160 X B9.7 A 4 K 1 AU 4 BZE -4.0 SW 377.2 Pf 14 Ef 2360`. The same 220-char truncation applies.
+- **`cmd wspr`** — replies with the current WSPR propagation from the [OH2GAX WSPR Logger](https://wspr.oh2gax.org/) ([source](https://github.com/oh2gax/wspr_logger)), read from its public JSON API (`/api/latest` and `/api/typical_day?days=7`). The reply gives the propagation level on the WSPR Logger scale (*Very low*, *Low*, *Normal*, *Good*, *Very good*, *Extremely good*, *Exceptional*; *& DX* when two or more stations beyond 6000 km hear the transmitter), the number of stations heard in the last 60 minutes, and whether that is **ABOVE** (over the 75th percentile), **SAME** or **BELOW** (under the 25th percentile) the typical day of the last 7 days at the current UTC hour. Small differences at night count as SAME, as on the WSPR Logger page. Example: `WSPR 20m 10:15Z: Very good & DX. 60 rptr/60m (3 >6000km), 7d typ 99 (90-139) BELOW. MUF 21.3 Loc KP20jg`. When nobody has heard the transmitter for an hour the reply is `No propagation` (or `No propagation or TX Fail` at an hour when the band is usually open), with the time, locator and reporters of the last spot. The server address is `WSPR_API_BASE` (default `https://wspr.oh2gax.org`) and can be changed in `local_config.py`.
 
 Other Services controls:
 
-- **Reply delay.** A configurable delay (seconds) before any service reply is sent, useful for nodes that are slow to switch RX/TX state. Shared by all three commands.
-- **Service log.** The Services page shows the most recent requests across all three services with status (`req` / `ok` / `queued` / `fail`) and a service column so you can tell METAR / TAF / Solar entries apart at a glance.
+- **Reply delay.** A configurable delay (seconds, 0–60) before any service reply is sent, useful for nodes that are slow to switch RX/TX state. Shared by all commands.
+- **Service log.** The Services page shows the most recent requests across all three services with status (`req` / `ok` / `queued` / `fail`) and a service column so you can tell METAR / TAF / Solar / WSPR entries apart at a glance.
 
-Service-command messages (e.g. `wx EFHK`, `taf EFHK`, `cmd solar`) are **not** stored in the Inbox or counted toward the unread count — they are treated as commands rather than chat. The pattern list is centralized in the code (`SERVICE_COMMAND_PATTERNS`), so adding more `cmd <name>` style commands later is a one-line change.
+Service-command messages (e.g. `wx EFHK`, `taf EFHK`, `cmd solar`, `cmd wspr`) are **not** stored in the Inbox or counted toward the unread count — they are treated as commands rather than chat. Commands are listed in one table in the code (`SERVICE_COMMANDS`, pattern + service name) with a reply function per service in `SERVICE_REPLY_BUILDERS`, so adding a new `cmd <name>` is a line in each.
 
 ### Send a direct message
 

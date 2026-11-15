@@ -62,6 +62,14 @@ main { flex: 1 0 auto; }
   position: relative;
 }
 .mg-navbar .nav-link:hover { opacity: 1; background: var(--mg-surface-2); }
+.mg-navbar .nav-link { white-space: nowrap; }
+/* Between 1200 and 1400 px: drop the menu icons so all items fit on one line. */
+@media (min-width: 1200px) and (max-width: 1399.98px) {
+  .mg-navbar .nav-link .bi { display: none; }
+  .mg-navbar .nav-link { padding: .4rem .55rem !important; }
+}
+/* A little more room on wide screens. */
+@media (min-width: 1400px) { .container-xl { max-width: 1440px; } }
 .mg-navbar .nav-link.active { opacity: 1; background: var(--mg-accent-soft); color: var(--mg-accent); font-weight: 600; }
 .mg-navbar .nav-link.has-unread { color: #dc3545; opacity: 1; }
 .mg-navbar .nav-link.has-unread::after {
@@ -172,3 +180,20 @@ pre.debugbox, .logbox {
 
 /* ---------- Footer ---------- */
 .mg-footer { border-top: 1px solid var(--mg-border); color: var(--mg-muted); font-size: .8rem; padding: .9rem 0; margin-top: 2rem; }
+
+/* ---------- What's new window ---------- */
+.wn-dot {
+  position: absolute; top: 3px; right: 3px; width: 8px; height: 8px; border-radius: 50%;
+  background: #dc3545; box-shadow: 0 0 0 2px var(--mg-surface);
+}
+.wn-version { display: flex; align-items: center; gap: .6rem; margin-top: 1rem; }
+.wn-version:first-of-type { margin-top: 0; }
+.wn-headline { font-weight: 650; margin: .35rem 0 .4rem; }
+.wn-notes { padding-left: 1.1rem; margin-bottom: .5rem; }
+.wn-notes li { margin-bottom: .45rem; line-height: 1.45; }
+.wn-notes code, .wn-headline code { font-size: .85em; }
+#whatsNewModal .modal-content { border-radius: var(--mg-radius); border: 1px solid var(--mg-border); background: var(--mg-surface); }
+#whatsNewModal .nav-pills .nav-link { padding: .3rem .8rem; font-size: .9rem; }
+#whatsNewModal .nav-pills .nav-link.active { background: var(--mg-accent); }
+.about dt { font-weight: 600; font-size: .9rem; }
+.about dd { margin-bottom: .7rem; }

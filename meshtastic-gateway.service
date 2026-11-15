@@ -1,0 +1,24 @@
+# systemd unit for the Meshtastic Gateway.
+# Install:  sudo cp meshtastic-gateway.service /etc/systemd/system/
+#           sudo systemctl daemon-reload
+#           sudo systemctl enable --now meshtastic-gateway
+# Edit User / paths below if your user or folder differ.
+
+[Unit]
+Description=Meshtastic WiFi Gateway Web UI
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=oh2gax
+Group=oh2gax
+WorkingDirectory=/home/oh2gax/meshtastic_gateway
+ExecStart=/home/oh2gax/meshtastic_gateway/venv/bin/python3 -u /home/oh2gax/meshtastic_gateway/gateway_web_stable.py
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

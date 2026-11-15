@@ -1,69 +1,66 @@
 {% extends "base.html" %}
-{% block extra_head %}
-<style>
-  /* Highlight unread rows. Works in both light and dark themes. */
-  tr.unread-row > td { font-weight: 600; }
-  [data-bs-theme="light"] tr.unread-row > td { background-color: #fff3cd !important; }
-  [data-bs-theme="dark"]  tr.unread-row > td { background-color: #3a2e0a !important; }
-  .unread-dot {
-    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-    background: #dc3545; margin-right: 6px; vertical-align: middle;
-  }
-</style>
-{% endblock %}
+{% import "_macros.html" as ui %}
 {% block body %}
-<div class="d-flex justify-content-between align-items-center mb-2">
-      <h5 class="m-0">Inbox (latest {{limit}})</h5>
-      <div class="d-flex align-items-center gap-2 smallish">
-        <form method="post" action="{{ url_for('inbox_mark_all_read') }}" class="m-0">
-          <button class="btn btn-sm btn-outline-secondary" type="submit"
-                  title="Mark all messages as read">Mark all read</button>
-        </form>
-        <div>
-          <a href="{{ url_for('inbox', limit=50) }}">50</a> |
-          <a href="{{ url_for('inbox', limit=200) }}">200</a> |
-          <a href="{{ url_for('inbox', limit=1000) }}">1000</a>
-        </div>
-      </div>
-    </div>
-    <div class="table-responsive">
-    <table class="table table-sm table-striped align-middle">
-      <thead><tr>
-        <th>Time</th><th>From</th><th>Text</th><th>RSSI</th><th>SNR</th><th></th>
-      </tr></thead>
-      <tbody>
-      {% for r in rows %}
-        {% set unread = (r["is_read"] == 0) %}
-        <tr {% if unread %}class="unread-row"{% endif %}>
-          <td class="mono">
-            {% if unread %}<span class="unread-dot" title="Unread"></span>{% endif %}
-            {{ r["ts_iso"]|replace(" UTC", "") }}
-          </td>
-          <td>
-            {{ node_display(r["from_long"], r["from_short"], r["from_id"]) }}{% if r["from_long"] or r["from_short"] %} <span class="small text-muted mono">{{ r["from_id"] }}</span>{% endif %}{% if r["hops"] is not none %} <span class="small text-muted">&middot; Hops {{ r["hops"] }}</span>{% endif %}
-            <span class="small text-muted ms-2">
-              &middot; <a href="{{ url_for('chat_with', node_id=r['from_id']) }}">Chat</a>
-              &middot; <a href="{{ url_for('send_form', to_id=r['from_id']) }}">Reply</a>
-            </span>
-          </td>
-          <td>{{ r["text"] }}</td>
-          <td class="mono">{{ r["rx_rssi"] }}</td>
-          <td class="mono">{{ r["rx_snr"] }}</td>
-          <td class="text-end">
-            <div class="d-flex flex-column gap-1 align-items-end">
-              {% if unread %}
-                <form method="post" action="{{ url_for('message_mark_read', msg_id=r['id']) }}" class="m-0">
-                  <button class="btn btn-sm btn-outline-success" type="submit">Mark read</button>
-                </form>
-              {% endif %}
-              <form method="post" action="{{ url_for('message_delete', msg_id=r['id']) }}" onsubmit="return confirm('Delete this message?');" class="m-0">
-                <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+<div class="page-head">
+  <h5><i class="bi bi-inbox"></i> Inbox <span class="chip">latest {{ limit }}</span></h5>
+  <div class="toolbar">
+    <form method="post" action="{{ url_for('inbox_mark_all_read') }}" class="m-0">
+      <button class="btn btn-sm btn-outline-secondary" type="submit" title="Mark all messages as read">
+        <i class="bi bi-check2-all"></i> Mark all read
+      </button>
+    </form>
+    {{ ui.seg([
+      ('50',   url_for('inbox', limit=50),   limit == 50),
+      ('200',  url_for('inbox', limit=200),  limit == 200),
+      ('1000', url_for('inbox', limit=1000), limit == 1000),
+    ]) }}
+  </div>
+</div>
+
+<div class="card table-card">
+  <div class="table-responsive">
+  <table class="table table-sm table-hover align-middle">
+    <thead><tr>
+      <th>Time</th><th>From</th><th>Text</th><th>RSSI</th><th>SNR</th><th></th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+      {% set unread = (r["is_read"] == 0) %}
+      <tr {% if unread %}class="unread-row"{% endif %}>
+        <td class="mono small text-nowrap">
+          {% if unread %}<span class="unread-dot" title="Unread"></span>{% endif %}
+          {{ r["ts_iso"]|replace(" UTC", "") }}
+        </td>
+        <td>
+          <div>{{ node_display(r["from_long"], r["from_short"], r["from_id"]) }}</div>
+          <div class="meta">
+            {% if r["from_long"] or r["from_short"] %}<span class="node-id">{{ r["from_id"] }}</span> &middot; {% endif %}
+            {% if r["hops"] is not none %}Hops {{ r["hops"] }} &middot; {% endif %}
+            <a href="{{ url_for('chat_with', node_id=r['from_id']) }}">Chat</a>
+            &middot; <a href="{{ url_for('send_form', to_id=r['from_id']) }}">Reply</a>
+          </div>
+        </td>
+        <td>{{ r["text"] }}</td>
+        <td class="mono small">{{ r["rx_rssi"] }}</td>
+        <td class="mono small">{{ r["rx_snr"] }}</td>
+        <td>
+          <div class="row-actions">
+            {% if unread %}
+              <form method="post" action="{{ url_for('message_mark_read', msg_id=r['id']) }}" class="m-0">
+                <button class="btn btn-sm btn-outline-success" type="submit" title="Mark read"><i class="bi bi-check2"></i></button>
               </form>
-            </div>
-          </td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    </div>
+            {% endif %}
+            <form method="post" action="{{ url_for('message_delete', msg_id=r['id']) }}" onsubmit="return confirm('Delete this message?');" class="m-0">
+              <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete"><i class="bi bi-trash3"></i></button>
+            </form>
+          </div>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="empty-state"><i class="bi bi-inbox"></i>No direct messages yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
 {% endblock %}

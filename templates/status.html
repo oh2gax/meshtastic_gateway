@@ -1,116 +1,112 @@
 {% extends "base.html" %}
-{% block extra_head %}
-
-{% endblock %}
 {% block body %}
-<h5>Status</h5>
+<div class="page-head">
+  <h5><i class="bi bi-activity"></i> Status
+    {% if connected %}<span class="badge rounded-pill text-bg-success"><i class="bi bi-wifi"></i> connected</span>
+    {% else %}<span class="badge rounded-pill text-bg-danger"><i class="bi bi-wifi-off"></i> disconnected</span>{% endif %}
+  </h5>
+  <div class="small text-body-secondary">Host <span class="mono">{{ host }}</span></div>
+</div>
 
-    <div class="card mb-3"><div class="card-body">
-      <div class="mono small">
-        <div><b>Host:</b> {{ host }}</div>
-        <div><b>Connection:</b> {{ "connected" if connected else "disconnected" }}</div>
-      </div>
+<div class="row g-3 mb-3">
+  <div class="col-md-6">
+    <div class="card h-100"><div class="card-body">
+      <div class="card-title-sm">Local node (from DB)</div>
+      {% if local %}
+        <dl class="row small mb-0">
+          <dt class="col-4 fw-medium">Node</dt><dd class="col-8">{{ node_display(local["long_name"], local["short_name"], local["node_id"]) }} <span class="node-id">{{ local["node_id"] }}</span></dd>
+          <dt class="col-4 fw-medium">HW</dt><dd class="col-8 mono">{{ local["hw_model"] }}</dd>
+          <dt class="col-4 fw-medium">MAC</dt><dd class="col-8 mono">{{ local["macaddr"] }}</dd>
+          <dt class="col-4 fw-medium">Last seen</dt><dd class="col-8 mono">{{ local["last_seen_iso"] }}</dd>
+          <dt class="col-4 fw-medium">RSSI / SNR</dt><dd class="col-8 mono">{{ local["last_rssi"] }} / {{ local["last_snr"] }}</dd>
+          <dt class="col-4 fw-medium">Position</dt><dd class="col-8 mono">{{ local["last_lat"] }}, {{ local["last_lon"] }}{% if local["last_alt"] is not none %} (alt {{ local["last_alt"] }}){% endif %}</dd>
+          <dt class="col-4 fw-medium">Pos time</dt><dd class="col-8 mono mb-0">{{ local["last_pos_iso"] }}</dd>
+        </dl>
+      {% else %}
+        <div class="text-body-secondary">No node data yet.</div>
+      {% endif %}
     </div></div>
+  </div>
 
-    <div class="row g-2 mb-2">
-      <div class="col-md-6">
-        <div class="card"><div class="card-body">
-          <div class="small text-muted mb-1">Local node (from DB)</div>
-          {% if local %}
-            <div class="mono small">
-              <div><b>Node:</b> {{ node_display(local["long_name"], local["short_name"], local["node_id"]) }} — {{ local["node_id"] }}</div>
-              <div><b>HW:</b> {{ local["hw_model"] }}  <b>MAC:</b> {{ local["macaddr"] }}</div>
-              <div><b>Last seen:</b> {{ local["last_seen_iso"] }}</div>
-              <div><b>RSSI/SNR:</b> {{ local["last_rssi"] }} / {{ local["last_snr"] }}</div>
-              <div><b>Position:</b> {{ local["last_lat"] }}, {{ local["last_lon"] }}{% if local["last_alt"] is not none %} (alt {{ local["last_alt"] }}){% endif %}</div>
-              <div><b>Pos time:</b> {{ local["last_pos_iso"] }}</div>
-            </div>
-          {% else %}
-            <div class="text-muted">No node data yet.</div>
-          {% endif %}
-        </div></div>
+  <div class="col-md-6">
+    <div class="card h-100"><div class="card-body">
+      <div class="card-title-sm">Maintenance</div>
+      <div class="small mb-2">
+        Remove "unknown" nodes (no name received) from this gateway and the connected device's NodeDB.
+        The gateway also clears them automatically after {{ unknown_auto_age_hours }} h.
       </div>
+      {% if cleanup %}
+        <div class="alert alert-info py-2 px-3 mb-2 small">
+          Last cleanup &mdash; scanned: {{ cleanup.scanned }},
+          removed: {{ cleanup.removed }},
+          skipped: {{ cleanup.skipped }},
+          failed: {{ cleanup.failed }}.
+        </div>
+      {% endif %}
+      <form method="post" action="{{ url_for('status_remove_unknown') }}"
+            onsubmit="return confirm('Remove all unknown nodes now?');" class="m-0">
+        <button class="btn btn-sm btn-outline-danger" type="submit"
+                {% if not connected %}disabled title="Gateway not connected to device"{% endif %}>
+          <i class="bi bi-eraser"></i> Remove unknown nodes now
+        </button>
+      </form>
 
-      <div class="col-md-6">
-        <div class="card"><div class="card-body">
-          <div class="small text-muted mb-1">Maintenance</div>
-          <div class="small mb-2">
-            Remove "unknown" nodes (no name received) from this gateway and the connected device's NodeDB.
-            The gateway also clears them automatically after {{ unknown_auto_age_hours }} h.
-          </div>
-          {% if cleanup %}
-            <div class="alert alert-info py-2 px-3 mb-2 small">
-              Last cleanup &mdash; scanned: {{ cleanup.scanned }},
-              removed: {{ cleanup.removed }},
-              skipped: {{ cleanup.skipped }},
-              failed: {{ cleanup.failed }}.
-            </div>
-          {% endif %}
-          <form method="post" action="{{ url_for('status_remove_unknown') }}"
-                onsubmit="return confirm('Remove all unknown nodes now?');" class="m-0">
-            <button class="btn btn-sm btn-outline-danger" type="submit"
-                    {% if not connected %}disabled title="Gateway not connected to device"{% endif %}>
-              Remove unknown nodes now
-            </button>
-          </form>
+      <hr class="my-3">
 
-          <hr class="my-3">
-
-          <div class="small text-muted mb-1">Remove specific node</div>
-          <div class="small mb-2">
-            For one-off cleanup of a particular node. Tells the connected
-            device to remove the node from its NodeDB and clears the row
-            from this gateway. The gateway's own node is never offered.
-          </div>
-          {% if manual_remove %}
-            <div class="alert {{ 'alert-success' if manual_remove.ok else 'alert-warning' }} py-2 px-3 mb-2 small">
-              {{ manual_remove.node_id }} &mdash; {{ manual_remove.msg }}
-            </div>
-          {% endif %}
-          <form method="post" action="{{ url_for('status_remove_node') }}"
-                onsubmit="return confirm('Remove the selected node?');"
-                class="d-flex gap-2 align-items-center m-0 flex-wrap">
-            <select name="node_id" class="form-select form-select-sm" style="max-width: 380px;">
-              <option value="">-- select a node --</option>
-              {% for n in (all_nodes or []) %}
-                {% if n['node_id'] != my_id %}
-                  <option value="{{ n['node_id'] }}">
-                    {{ node_display(n['long_name'], n['short_name'], n['node_id']) }}
-                    &mdash; {{ n['node_id'] }}
-                    {% if n['last_seen_iso'] %}({{ n['last_seen_iso'] }}){% endif %}
-                  </option>
-                {% endif %}
-              {% endfor %}
-            </select>
-            <button class="btn btn-sm btn-outline-danger" type="submit">
-              Remove selected node
-            </button>
-          </form>
-        </div></div>
+      <div class="card-title-sm">Remove specific node</div>
+      <div class="small mb-2">
+        For one-off cleanup of a particular node. Tells the connected
+        device to remove the node from its NodeDB and clears the row
+        from this gateway. The gateway's own node is never offered.
       </div>
-    </div>
+      {% if manual_remove %}
+        <div class="alert {{ 'alert-success' if manual_remove.ok else 'alert-warning' }} py-2 px-3 mb-2 small">
+          {{ manual_remove.node_id }} &mdash; {{ manual_remove.msg }}
+        </div>
+      {% endif %}
+      <form method="post" action="{{ url_for('status_remove_node') }}"
+            onsubmit="return confirm('Remove the selected node?');"
+            class="d-flex gap-2 align-items-center m-0 flex-wrap">
+        <select name="node_id" class="form-select form-select-sm" style="max-width: 380px;">
+          <option value="">-- select a node --</option>
+          {% for n in (all_nodes or []) %}
+            {% if n['node_id'] != my_id %}
+              <option value="{{ n['node_id'] }}">
+                {{ node_display(n['long_name'], n['short_name'], n['node_id']) }}
+                &mdash; {{ n['node_id'] }}
+                {% if n['last_seen_iso'] %}({{ n['last_seen_iso'] }}){% endif %}
+              </option>
+            {% endif %}
+          {% endfor %}
+        </select>
+        <button class="btn btn-sm btn-outline-danger" type="submit">
+          <i class="bi bi-trash3"></i> Remove selected node
+        </button>
+      </form>
+    </div></div>
+  </div>
+</div>
 
-    <div class="row g-2">
-      <div class="col-md-12">
-        <div class="card"><div class="card-body">
-          <div class="small text-muted mb-1">Live node data (best-effort, from interface)</div>
-          {% if connected and live_node_json %}
-            <pre class="mono small" style="max-height:35vh; overflow:auto;">{{ live_node_json }}</pre>
-          {% else %}
-            <div class="text-muted">Not available.</div>
-          {% endif %}
-        </div></div>
-      </div>
-
-      <div class="col-md-12">
-        <div class="card"><div class="card-body">
-          <div class="small text-muted mb-1">Interface summary</div>
-          {% if connected %}
-            <pre class="mono small" style="max-height:35vh; overflow:auto;">{{ iface_json }}</pre>
-          {% else %}
-            <div class="text-muted">Not connected.</div>
-          {% endif %}
-        </div></div>
-      </div>
-    </div>
+<div class="row g-3">
+  <div class="col-12">
+    <div class="card"><div class="card-body">
+      <div class="card-title-sm">Live node data (best-effort, from interface)</div>
+      {% if connected and live_node_json %}
+        <pre class="debugbox" style="max-height:35vh;">{{ live_node_json }}</pre>
+      {% else %}
+        <div class="text-body-secondary">Not available.</div>
+      {% endif %}
+    </div></div>
+  </div>
+  <div class="col-12">
+    <div class="card"><div class="card-body">
+      <div class="card-title-sm">Interface summary</div>
+      {% if connected %}
+        <pre class="debugbox" style="max-height:35vh;">{{ iface_json }}</pre>
+      {% else %}
+        <div class="text-body-secondary">Not connected.</div>
+      {% endif %}
+    </div></div>
+  </div>
+</div>
 {% endblock %}

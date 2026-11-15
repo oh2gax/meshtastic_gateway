@@ -1,0 +1,19 @@
+"""
+local_config.py.example -- template for per-machine settings.
+
+Copy this file to local_config.py (same folder) and edit the values.
+local_config.py is gitignored, so update.sh can pull new versions from
+GitHub without overwriting your settings. Anything you leave out keeps the
+default from gateway_web_stable.py.
+"""
+
+# IP address of the Meshtastic radio (Heltec V3/V4) on your WiFi.
+HOST = "192.168.1.197"
+
+# Web UI bind address and port. "0.0.0.0" = reachable from the LAN,
+# "127.0.0.1" = this machine only.
+# WEB_HOST = "0.0.0.0"
+# WEB_PORT = 8000
+
+# SQLite database file (created automatically on first start).
+# DB_PATH = "./meshtastic_messages.db"

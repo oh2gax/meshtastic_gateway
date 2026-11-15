@@ -1,0 +1,28 @@
+{# Shared UI helpers. Import with: {% import "_macros.html" as ui %} #}
+
+{% macro ack_badge(a) -%}
+  {%- if a == "acked" -%}<span class="ack ack-y" title="Y: ACK from recipient (end-to-end delivered)">Y</span>
+  {%- elif a in ("no_ack", "nacked", "implicit_ack") -%}<span class="ack ack-s" title="S: sent, but no end-to-end ACK from the recipient">S</span>
+  {%- elif a == "pending" -%}<span class="ack ack-p" title="Waiting for outcome">…</span>
+  {%- else -%}<span class="ack ack-na" title="Not applicable">—</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{# items: list of (label, url, is_active) #}
+{% macro seg(items) -%}
+  <div class="btn-group seg" role="group">
+    {%- for label, url, active in items %}
+      <a class="btn btn-outline-secondary {% if active %}active{% endif %}" href="{{ url }}">{{ label }}</a>
+    {%- endfor %}
+  </div>
+{%- endmacro %}
+
+{# Auto-refresh dropdown. Behaviour lives in base.html (class mg-refresh). #}
+{% macro refresh_select(id, key, default="0") -%}
+  <span class="toolbar-label"><i class="bi bi-arrow-repeat"></i></span>
+  <select id="{{ id }}" class="form-select form-select-sm mg-refresh" data-key="{{ key }}" style="width:auto" title="Auto-refresh">
+    {%- for v, l in [("0","Off"),("10","10s"),("30","30s"),("60","60s")] %}
+      <option value="{{ v }}" {% if v == default %}selected{% endif %}>{{ l }}</option>
+    {%- endfor %}
+  </select>
+{%- endmacro %}

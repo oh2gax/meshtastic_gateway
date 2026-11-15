@@ -58,11 +58,11 @@ The gateway performs lightweight schema migrations automatically on startup, so 
 - **Active Nodes** — list of heard nodes with selectable time windows, including a *Pos* indicator (`Y` if a position is known, otherwise `—`) and a *Hops* column showing how many hops away each node is (`0` = direct neighbor, `—` = unknown). The page header shows the live total in a `count=N` chip next to the time-window chip. Optional auto-refresh (`Off` / `10s` / `30s` / `60s`).
 - **Broadcast** — chat-style view of broadcast traffic. A channel selector at the top lets you view any of the channels configured on your Meshtastic device, and you can broadcast a message to the currently selected channel from the same page. The navbar's *Broadcast* button turns red whenever a new broadcast has arrived since you last opened the page (across any channel), and reverts to its normal style on the next visit. Optional auto-refresh (`Off` / `10s` / `30s` / `60s`). Broadcast traffic is kept separate from Inbox/Outbox.
 - **Chat** — per-node DM thread with newest at the bottom and auto-scroll on open. Includes a node picker dropdown, optional auto-refresh, ACK status on outgoing rows, *Hops* annotation on incoming rows, and auto-marks DMs from the open conversation as read. Reachable from the navbar or from any *Chat* link in Inbox / Outbox / Active Nodes.
-- **Map** — last known positions of all heard nodes. Filled circles show node location (green = recent, blue = older); hovering a circle shows a small tooltip with the node's short name, and clicking opens a popup with full details (RSSI, SNR, hop count, last seen, lat/lon). The side list also shows hop count and distance per node. Optional per-node track lines, configurable last *N* points. The map automatically uses light or dark tiles depending on the theme setting. The dark tiles are CARTO basemaps, which require a free CARTO API key (see *Configure the gateway* below) — without one the tiles still load but show a "API key required" watermark.
+- **Map** — last known positions of all heard nodes. Filled circles show node location (green = recent, blue = older); hovering a circle shows a small tooltip with the node's short name, and clicking opens a popup with full details (RSSI, SNR, hop count, last seen, lat/lon). The side list also shows hop count and distance per node. Optional per-node track lines; the *Track min* box sets how many minutes of track to draw (up to 1440, limited to today in the Pi's local time). The map automatically uses light or dark tiles depending on the theme setting. The dark tiles are CARTO basemaps, which require a free CARTO API key (see *Configure the gateway* below) — without one the tiles still load but show a "API key required" watermark.
 - **Debug** — terminal-style view of raw JSON packets, with pause/copy/filter controls.
 - **Status** — best-effort live node info from the interface plus the gateway's own connection state, and a *Maintenance* card with controls to remove "unknown" nodes (no name received) on demand and to remove a specific node chosen from a dropdown.
 - **Services** — enable/disable the combined METAR / TAF / Solar service, configure the reply delay, and see the latest service-traffic log.
-- **Send** — per-node chat / send-message view (direct messages), with ACK feedback.
+- **Send** — compose a direct message or a broadcast. When opened via a *Reply* link the reply target is always pre-selected, even if that node hasn't been heard recently.
 
 There is also a global **Theme** toggle in the navbar (light / dark) and a **New message** indicator that shows in the top right when there are unread direct messages.
 
@@ -87,18 +87,26 @@ On the Meshtastic device:
 - The Meshtastic Python library connects using the device's TCP "API" interface over WiFi.
 
 
-## Installation (Raspberry Pi 4)
+## Installation (Raspberry Pi 3 / 4)
 
-### 1) System packages
+The examples below use the user `oh2gax` and install into `/home/oh2gax/meshtastic_gateway`. Replace the user name if yours is different.
+
+A Raspberry Pi 3 is plenty: the gateway uses well under 100 MB of RAM. Raspberry Pi OS Lite (Bookworm, 64-bit) is recommended. Installing the Python packages the first time takes a few minutes on a Pi 3.
+
+### 1) System packages and time zone
 
 ```
 sudo apt update
-sudo apt install -y python3 python3-venv python3-pip
+sudo apt install -y git python3 python3-venv python3-pip
+sudo timedatectl set-timezone Europe/Helsinki
 ```
+
+The UI shows all times in UTC; the time zone only decides where "today" starts for map track lines.
 
 ### 2) Clone the repo
 
 ```
+cd ~
 git clone https://github.com/oh2gax/meshtastic_gateway.git
 cd meshtastic_gateway
 ```
@@ -107,96 +115,53 @@ cd meshtastic_gateway
 
 ```
 python3 -m venv venv
-source venv/bin/activate
-pip install --upgrade pip
-pip install meshtastic flask pypubsub
+venv/bin/pip install --upgrade pip
+venv/bin/pip install -r requirements.txt
 ```
 
-If you prefer, create a `requirements.txt`:
-
-```
-meshtastic
-flask
-pypubsub
-```
-
-and install with:
-
-```
-pip install -r requirements.txt
-```
+(`requirements.txt` contains `meshtastic`, `flask` and `pypubsub`.)
 
 ### 4) Configure the gateway
 
-Edit the main script (e.g. `gateway_web_stable.py`) and update the configuration section near the top.
-
-Meshtastic device IP address:
+Per-machine settings live in `local_config.py`, which is gitignored, so updates from GitHub never overwrite them:
 
 ```
-HOST = "192.168.1.100"
+cp local_config.py.example local_config.py
+nano local_config.py
 ```
 
-SQLite database file path:
+Set at least the IP address of your Meshtastic radio:
 
 ```
-DB_PATH = "./meshtastic_messages.db"
+HOST = "192.168.1.197"
 ```
 
-API keys (CARTO, and any others added later) live in a separate local file, `api_keys.py`, so a real key never ends up in `gateway_web_stable.py` or gets pushed to GitHub:
+Optional settings in the same file: `WEB_HOST` (`"0.0.0.0"` = reachable from the LAN, `"127.0.0.1"` = local only), `WEB_PORT` (default `8000`) and `DB_PATH` (default `./meshtastic_messages.db`). Anything you leave out keeps the default from the top of `gateway_web_stable.py`.
+
+API keys (CARTO, and any others added later) live in a separate local file, `api_keys.py`, also gitignored:
 
 ```
 cp api_keys.py.example api_keys.py
+nano api_keys.py
 ```
-
-Then edit `api_keys.py` and fill in your own key(s):
 
 ```
 CARTO_API_KEY = "your-carto-api-key-here"
 ```
 
-`api_keys.py` is listed in `.gitignore`, so it stays local to each machine you run the gateway on — you can pull/push the repo as usual without editing keys in or out. `api_keys.py.example` is the committed template with empty placeholders; add any future keys there the same way, one line each. If `api_keys.py` doesn't exist (e.g. right after a fresh clone), the gateway still starts — it just prints a warning and leaves that key blank until you add it.
+**CARTO Basemaps API key** — used for the dark-mode map tiles on the *Map* page. Get a free key at [carto.com/basemaps/apikey](https://carto.com/basemaps/apikey) (free up to 5,000,000 tile requests/month). Without a key, the dark map tiles still load but show an "API key required" watermark. The light-mode OpenStreetMap tiles don't need a key. If `api_keys.py` doesn't exist, the gateway still starts and just prints a warning.
 
-**CARTO Basemaps API key** — used for the dark-mode map tiles on the *Map* page. Get a free key at [carto.com/basemaps/apikey](https://carto.com/basemaps/apikey) (free up to 5,000,000 tile requests/month). Without a key, the dark map tiles still load but show an "API key required" watermark. This only affects the dark-mode CARTO raster tiles; the light-mode OpenStreetMap tiles don't need a key.
+The database is **not** part of the repository. The gateway creates an empty `meshtastic_messages.db` on first start and fills it from there.
 
-Web UI bind address + port:
-
-```
-WEB_HOST = "0.0.0.0"
-WEB_PORT = 8000
-```
-
-Notes:
-
-- `HOST` must be the IP of your Meshtastic device on WiFi (DHCP or static).
-- `DB_PATH` is relative by default, so it works from any checkout folder as long as `meshtastic_messages.db` sits next to the script. Set an absolute path if you'd rather keep the database elsewhere.
-- `WEB_HOST = "0.0.0.0"` makes it accessible from other machines on your LAN. Use `"127.0.0.1"` for local-only access.
-
-### 5) Run it
+### 5) Test run
 
 ```
-source venv/bin/activate
-python3 gateway_web_stable.py
+venv/bin/python3 gateway_web_stable.py
 ```
 
-To run in the background:
+Open `http://<raspberry-pi-ip>:8000` in a browser. You should see `[GW] Connected.` in the terminal within a few seconds. Stop with `Ctrl+C`, then install it as a service (next section) so it starts on boot.
 
-```
-nohup python3 gateway_web_stable.py > /dev/null 2>&1 &
-ps -ef
-```
-
-To kill the background process:
-
-```
-ps -ef
-kill <process number>
-```
-
-Open in a browser:
-
-```
-http://<raspberry-pi-ip>:8000
-```
+Note: the radio's TCP API normally serves only one client at a time. If another gateway (or the Meshtastic app over WiFi) is connected to the same radio, stop it first.
 
 
 ## Common operations
@@ -330,38 +295,62 @@ Whenever there are unread direct messages, a **New message** indicator appears i
 To clear the indicator, mark the relevant messages as read on the Inbox page (per message or all at once).
 
 
-## Running as a service (optional)
+## Running as a service (systemd)
 
-Create a systemd unit to start the gateway on boot.
+The repository includes a ready-made unit file, `meshtastic-gateway.service`, for user `oh2gax` and folder `/home/oh2gax/meshtastic_gateway`. If your user or folder is different, edit `User=`, `Group=`, `WorkingDirectory=` and `ExecStart=` first.
 
-Example: `/etc/systemd/system/meshtastic-gateway.service`
-
-```
-[Unit]
-Description=Meshtastic WiFi Gateway Web UI
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/<your-repo>
-ExecStart=/home/pi/<your-repo>/venv/bin/python3 /home/pi/<your-repo>/gateway_web_stable.py
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable + start:
+Install, enable on boot and start:
 
 ```
+cd ~/meshtastic_gateway
+sudo cp meshtastic-gateway.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable meshtastic-gateway
-sudo systemctl start meshtastic-gateway
-sudo systemctl status meshtastic-gateway
+sudo systemctl enable --now meshtastic-gateway
 ```
+
+Everyday commands:
+
+```
+systemctl status meshtastic-gateway        # running?
+journalctl -u meshtastic-gateway -f        # follow the log (Ctrl+C to stop)
+journalctl -u meshtastic-gateway -n 100    # last 100 log lines
+sudo systemctl restart meshtastic-gateway
+sudo systemctl stop meshtastic-gateway
+sudo systemctl disable meshtastic-gateway  # don't start on boot
+```
+
+The service restarts the gateway automatically if it crashes (after 5 s), and the gateway itself reconnects to the radio if the WiFi link drops.
+
+
+## Updating (update.sh)
+
+To update to the latest version from GitHub:
+
+```
+cd ~/meshtastic_gateway
+./update.sh
+```
+
+(First time only, if you get "Permission denied": `bash update.sh` — the script fixes its own permissions.)
+
+What it does:
+
+1. Checks GitHub; if there's nothing new it just says *Already up to date*.
+2. Stops the service.
+3. Backs up the database, `api_keys.py` and `local_config.py` to `~/meshtastic_backups/<date-time>/` (the last 5 backups are kept).
+4. Updates the code to the latest `main`. The database, `api_keys.py`, `local_config.py` and `venv/` are never touched.
+5. Installs Python packages if `requirements.txt` changed.
+6. Checks the new code; if it's broken it rolls back to the previous version automatically.
+7. Starts the service again and shows the last log lines.
+
+Options:
+
+```
+./update.sh --deps    # also upgrade Python packages (e.g. a newer meshtastic library)
+./update.sh --force   # update even if up to date, or if files were edited on the Pi
+```
+
+If you have edited `gateway_web_stable.py` (or any other tracked file) directly on the Pi, `update.sh` stops and lists the files instead of overwriting them. Move the settings into `local_config.py`, or run with `--force` (your edits are saved as `local_changes.patch` in the backup folder).
 
 
 ## Database files
@@ -373,6 +362,8 @@ meshtastic_messages.db-shm
 ```
 
 That's expected. SQLite WAL mode uses these for performance and safe concurrency while the app is running. Do not delete them while the gateway is running.
+
+The database holds private messages and position history, so it is listed in `.gitignore` and never pushed to GitHub. Each install starts with its own empty database. `update.sh` makes a backup before every update; to back up by hand, stop the service and copy the three files.
 
 
 ## Security notes

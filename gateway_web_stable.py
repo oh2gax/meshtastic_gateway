@@ -33,6 +33,7 @@ Folder layout (keep together):
 
 import json
 import math
+import queue
 import sqlite3
 import time
 import threading
@@ -75,12 +76,26 @@ except ImportError:
 WEB_HOST = "0.0.0.0"
 WEB_PORT = 8000
 
+# Optional per-machine overrides. Create local_config.py next to this script
+# (see local_config.py.example; it is gitignored) to set HOST / DB_PATH /
+# WEB_HOST / WEB_PORT without editing this file. That way update.sh can pull
+# new versions from GitHub without clashing with local edits.
+try:
+    import local_config as _local_config  # type: ignore
+    for _k in ("HOST", "DB_PATH", "WEB_HOST", "WEB_PORT"):
+        if hasattr(_local_config, _k):
+            globals()[_k] = getattr(_local_config, _k)
+    print(f"[config] local_config.py loaded (HOST={HOST}, WEB_PORT={WEB_PORT})")
+except ImportError:
+    pass
+
 DEFAULT_ACTIVE_WINDOW = "2h"   # 2h, 6h, 1d, 1w, 1m supported
 DEFAULT_CHAT_LIMIT = 20
 DEFAULT_MAP_TRACK_POINTS = 60
 
-# How many position rows to keep per node (separate from the UI 'minutes' filter)
-POSITION_KEEP_PER_NODE = 5000
+# How many position rows to keep per node (separate from the UI 'minutes' filter).
+# insert_position() clamps this to 5..2000, so 2000 is the effective maximum.
+POSITION_KEEP_PER_NODE = 2000
 
 # How often we re-scan iface.nodes to pick up late-arriving / changed names & HW fields
 NODE_REFRESH_INTERVAL_SEC = 30
@@ -287,13 +302,29 @@ TAF_MAX_LEN = 220  # truncate to fit a single Meshtastic DM payload comfortably
 SOLAR_BASE_URL = "https://www.hamqsl.com/solarxml.php"
 SOLAR_MAX_LEN = 220
 
-# Pattern(s) for messages that the gateway treats as service commands.
-# Service commands are NOT stored in the inbox.
-SERVICE_COMMAND_PATTERNS = (
-    re.compile(r"^\s*wx\s+[A-Za-z]{4}\s*$", re.IGNORECASE),   # METAR: "wx EFHK"
-    re.compile(r"^\s*taf\s+[A-Za-z]{4}\s*$", re.IGNORECASE),  # TAF:   "taf EFHK"
-    re.compile(r"^\s*cmd\s+solar\s*$", re.IGNORECASE),        # Solar: "cmd solar"
+# Service commands: (pattern, service name). The first regex group, if any,
+# is passed to the reply builder as the query (e.g. the ICAO code).
+# Service commands are NOT stored in the inbox. To add a new command, add a
+# line here and a matching builder in SERVICE_REPLY_BUILDERS (further down).
+SERVICE_COMMANDS = (
+    (re.compile(r"^\s*wx\s+([A-Za-z]{4})\s*$", re.IGNORECASE), "metar"),  # "wx EFHK"
+    (re.compile(r"^\s*taf\s+([A-Za-z]{4})\s*$", re.IGNORECASE), "taf"),   # "taf EFHK"
+    (re.compile(r"^\s*cmd\s+solar\s*$", re.IGNORECASE), "solar"),         # "cmd solar"
 )
+SERVICE_COMMAND_PATTERNS = tuple(p for p, _ in SERVICE_COMMANDS)
+
+
+def match_service_command(text: Optional[str]) -> Optional[Tuple[str, str]]:
+    """Return (service, query) if text is a service command, else None."""
+    if not text:
+        return None
+    s = str(text)
+    for pat, service in SERVICE_COMMANDS:
+        m = pat.match(s)
+        if m:
+            query = (m.group(1).upper() if m.groups() else service)
+            return service, query
+    return None
 
 def is_service_command(text: Optional[str]) -> bool:
     """Return True if the text matches any known service-command pattern."""
@@ -447,6 +478,29 @@ def compact_solar(data: Optional[Dict[str, str]]) -> str:
     if len(s) > SOLAR_MAX_LEN:
         s = s[:SOLAR_MAX_LEN].rstrip() + "…"
     return s
+
+
+def _reply_metar(icao: str) -> str:
+    m = fetch_metar_text(icao)
+    return compact_metar(m, icao) if m else f"No METAR for {icao}"
+
+
+def _reply_taf(icao: str) -> str:
+    t = fetch_taf_text(icao)
+    return compact_taf(t, icao) if t else f"No TAF for {icao}"
+
+
+def _reply_solar(_query: str) -> str:
+    d = fetch_solar_data()
+    return compact_solar(d) if d else "Solar data unavailable"
+
+
+SERVICE_REPLY_BUILDERS = {
+    "metar": _reply_metar,
+    "taf": _reply_taf,
+    "solar": _reply_solar,
+}
+SERVICE_QUEUE_MAX = 50
 
 
 # Debug buffer
@@ -1344,16 +1398,17 @@ def list_nodes_with_position(conn: sqlite3.Connection, window_seconds: int) -> L
         return cur.fetchall()
 
 def get_track_points(conn: sqlite3.Connection, node_id: str, minutes: int) -> List[Tuple[float, float]]:
-    """Return track points for the last N minutes, limited to the current UTC date."""
+    """Return track points for the last N minutes, limited to the current
+    local calendar day (the Pi's timezone, e.g. Europe/Helsinki)."""
     conn.row_factory = sqlite3.Row
     minutes = max(1, min(int(minutes), 24 * 60))  # cap at 24h
 
     now = utc_ts()
     cutoff = now - minutes * 60
 
-    # limit to current UTC date (00:00 UTC .. now)
-    dt_now = datetime.fromtimestamp(now, tz=timezone.utc)
-    start_of_day = int(datetime(dt_now.year, dt_now.month, dt_now.day, tzinfo=timezone.utc).timestamp())
+    # limit to the current local date (local 00:00 .. now)
+    dt_now = datetime.fromtimestamp(now).astimezone()
+    start_of_day = int(dt_now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
     if cutoff < start_of_day:
         cutoff = start_of_day
 
@@ -1561,6 +1616,12 @@ class Gateway:
         self.iface: Optional[TCPInterface] = None
         self.stop_event = threading.Event()
         self._last_node_refresh_ts: int = 0
+        # Service replies (METAR/TAF/Solar) run on their own worker thread so
+        # the HTTP fetch + reply delay never blocks the radio receive thread.
+        self.svc_queue: "queue.Queue[Dict[str, Any]]" = queue.Queue(maxsize=SERVICE_QUEUE_MAX)
+        self._svc_thread = threading.Thread(target=self._service_worker,
+                                            name="service-worker", daemon=True)
+        self._svc_thread.start()
 
         pub.subscribe(self.on_text, "meshtastic.receive.text")
         pub.subscribe(self.on_any_packet, "meshtastic.receive")
@@ -1743,162 +1804,8 @@ class Gateway:
             # Robust text logging: some setups don't emit meshtastic.receive.text
             decoded = packet.get("decoded")
             if isinstance(decoded, dict):
-                port = decoded.get("portnum")
-                text = decoded.get("text")
-                if (port == "TEXT_MESSAGE_APP" or text is not None):
-                    pid = packet.get("id")
-                    try:
-                        pid_int = int(pid) if pid is not None else None
-                    except Exception:
-                        pid_int = None
-
-                    if not _seen_text_packet_id(pid_int):
-                        try:
-                            ch_idx_val = safe_get(packet, "channel", default=None)
-                            ch_name = channel_name_for(self.db, self.my_id, ch_idx_val)
-                            # Skip storing service-command DMs (e.g. "wx EFHK") in the Inbox.
-                            if not is_service_command(text):
-                                log_incoming_text(self.db, packet, channel_name=ch_name)
-
-                            # METAR service: respond to direct messages that start with "wx <ICAO>"
-                            try:
-                                text_in = safe_get(packet, "decoded", "text", default=None)
-                                if text_in:
-                                    mmx = re.match(r"^\s*wx\s+([A-Za-z]{4})\s*$", str(text_in), flags=re.IGNORECASE)
-                                    if mmx:
-                                        enabled = get_setting(self.db, METAR_ENABLED_KEY, "1")
-                                        metar_enabled = True if enabled in ("1", "true", "yes", "on") else False
-                                        if metar_enabled:
-                                            icao = mmx.group(1).upper()
-                                            to_id = packet.get("toId") or int_to_node_id(packet.get("to"))
-                                            sender_id = packet.get("fromId") or int_to_node_id(packet.get("from"))
-                                            if to_id and sender_id and to_id not in ("^all", "!ffffffff"):
-                                                # Fetch METAR
-                                                log_service_event(self.db, "metar", sender_id, to_id, icao, "req", "")
-                                                metar = fetch_metar_text(icao)
-                                                if metar:
-                                                    reply = compact_metar(metar, icao)
-                                                else:
-                                                    reply = f"No METAR for {icao}"
-                                                # Try immediate send (preferred), fallback to outbox
-                                                sent_ok = False
-                                                if getattr(self, 'iface', None) is not None:
-                                                    try:
-                                                        # DM reply; channel index is not required for PKI DMs
-                                                        time.sleep(int(get_setting(self.db, METAR_DELAY_KEY, "3") or 3))
-
-                                                        self.iface.sendText(reply, destinationId=sender_id)
-                                                        sent_ok = True
-                                                        log_service_event(self.db, "metar", sender_id, to_id, icao, "ok", reply)
-                                                    except Exception as e_send:
-                                                        debug_add({'ts': iso_now(), 'fromId': sender_id, 'type': 'svc', 'note': f'metar sendText failed: {e_send}'})
-                                                        log_service_event(self.db, "metar", sender_id, to_id, icao, "fail", f"sendText: {e_send}")
-                                                if not sent_ok:
-                                                    try:
-                                                        ch = packet.get('channel')
-                                                        try:
-                                                            ch_i = int(ch) if ch is not None else None
-                                                        except Exception:
-                                                            ch_i = None
-                                                        queue_outbox(self.db, sender_id, ch_i, reply)
-                                                        log_service_event(self.db, "metar", sender_id, to_id, icao, "queued", reply)
-                                                    except Exception as e_q:
-                                                        debug_add({'ts': iso_now(), 'fromId': sender_id, 'type': 'svc', 'note': f'metar queue failed: {e_q}'})
-                                                        log_service_event(self.db, "metar", sender_id, to_id, icao, "fail", f"queue: {e_q}")
-
-                                # TAF service: respond to direct messages "taf <ICAO>".
-                                # The Services on/off setting (METAR_ENABLED_KEY) and the
-                                # reply delay (METAR_DELAY_KEY) are shared with METAR; this
-                                # is one combined "METAR & TAF" service.
-                                mtaf = re.match(r"^\s*taf\s+([A-Za-z]{4})\s*$", str(text_in), flags=re.IGNORECASE)
-                                if mtaf:
-                                    enabled_t = get_setting(self.db, METAR_ENABLED_KEY, "1")
-                                    taf_enabled = True if enabled_t in ("1", "true", "yes", "on") else False
-                                    if taf_enabled:
-                                        icao = mtaf.group(1).upper()
-                                        to_id = packet.get("toId") or int_to_node_id(packet.get("to"))
-                                        sender_id = packet.get("fromId") or int_to_node_id(packet.get("from"))
-                                        if to_id and sender_id and to_id not in ("^all", "!ffffffff"):
-                                            log_service_event(self.db, "taf", sender_id, to_id, icao, "req", "")
-                                            taf = fetch_taf_text(icao)
-                                            if taf:
-                                                reply_t = compact_taf(taf, icao)
-                                            else:
-                                                reply_t = f"No TAF for {icao}"
-                                            sent_ok_t = False
-                                            if getattr(self, 'iface', None) is not None:
-                                                try:
-                                                    time.sleep(int(get_setting(self.db, METAR_DELAY_KEY, "3") or 3))
-                                                    self.iface.sendText(reply_t, destinationId=sender_id)
-                                                    sent_ok_t = True
-                                                    log_service_event(self.db, "taf", sender_id, to_id, icao, "ok", reply_t)
-                                                except Exception as e_send_t:
-                                                    debug_add({'ts': iso_now(), 'fromId': sender_id, 'type': 'svc', 'note': f'taf sendText failed: {e_send_t}'})
-                                                    log_service_event(self.db, "taf", sender_id, to_id, icao, "fail", f"sendText: {e_send_t}")
-                                            if not sent_ok_t:
-                                                try:
-                                                    ch_t = packet.get('channel')
-                                                    try:
-                                                        ch_i_t = int(ch_t) if ch_t is not None else None
-                                                    except Exception:
-                                                        ch_i_t = None
-                                                    queue_outbox(self.db, sender_id, ch_i_t, reply_t)
-                                                    log_service_event(self.db, "taf", sender_id, to_id, icao, "queued", reply_t)
-                                                except Exception as e_q_t:
-                                                    debug_add({'ts': iso_now(), 'fromId': sender_id, 'type': 'svc', 'note': f'taf queue failed: {e_q_t}'})
-                                                    log_service_event(self.db, "taf", sender_id, to_id, icao, "fail", f"queue: {e_q_t}")
-
-                                # Solar / propagation service: respond to "cmd solar".
-                                # Shares the METAR_ENABLED on/off and reply-delay settings.
-                                msolar = re.match(r"^\s*cmd\s+solar\s*$", str(text_in), flags=re.IGNORECASE)
-                                if msolar:
-                                    enabled_s = get_setting(self.db, METAR_ENABLED_KEY, "1")
-                                    solar_enabled = True if enabled_s in ("1", "true", "yes", "on") else False
-                                    if solar_enabled:
-                                        to_id = packet.get("toId") or int_to_node_id(packet.get("to"))
-                                        sender_id = packet.get("fromId") or int_to_node_id(packet.get("from"))
-                                        if to_id and sender_id and to_id not in ("^all", "!ffffffff"):
-                                            log_service_event(self.db, "solar", sender_id, to_id, "solar", "req", "")
-                                            sdata = fetch_solar_data()
-                                            if sdata:
-                                                reply_s = compact_solar(sdata)
-                                            else:
-                                                reply_s = "Solar data unavailable"
-                                            sent_ok_s = False
-                                            if getattr(self, 'iface', None) is not None:
-                                                try:
-                                                    time.sleep(int(get_setting(self.db, METAR_DELAY_KEY, "3") or 3))
-                                                    self.iface.sendText(reply_s, destinationId=sender_id)
-                                                    sent_ok_s = True
-                                                    log_service_event(self.db, "solar", sender_id, to_id, "solar", "ok", reply_s)
-                                                except Exception as e_send_s:
-                                                    debug_add({'ts': iso_now(), 'fromId': sender_id, 'type': 'svc', 'note': f'solar sendText failed: {e_send_s}'})
-                                                    log_service_event(self.db, "solar", sender_id, to_id, "solar", "fail", f"sendText: {e_send_s}")
-                                            if not sent_ok_s:
-                                                try:
-                                                    ch_s = packet.get('channel')
-                                                    try:
-                                                        ch_i_s = int(ch_s) if ch_s is not None else None
-                                                    except Exception:
-                                                        ch_i_s = None
-                                                    queue_outbox(self.db, sender_id, ch_i_s, reply_s)
-                                                    log_service_event(self.db, "solar", sender_id, to_id, "solar", "queued", reply_s)
-                                                except Exception as e_q_s:
-                                                    debug_add({'ts': iso_now(), 'fromId': sender_id, 'type': 'svc', 'note': f'solar queue failed: {e_q_s}'})
-                                                    log_service_event(self.db, "solar", sender_id, to_id, "solar", "fail", f"queue: {e_q_s}")
-                            except Exception as e:
-                                # keep gateway alive but record why it failed
-                                try:
-                                    debug_add({'ts': iso_now(), 'type': 'svc', 'note': f'metar handler error: {e}'})
-                                except Exception:
-                                    pass
-                        except Exception:
-                            pass
-                        try:
-                            print(f"[GW] IN {packet.get('fromId')} -> {packet.get('toId')}: {text}")
-                        except Exception:
-                            pass
-
+                if decoded.get("portnum") == "TEXT_MESSAGE_APP" or decoded.get("text") is not None:
+                    self._handle_text_packet(packet)
 
             # Update last_seen and (if present) position
             if from_id is None:
@@ -1940,22 +1847,106 @@ class Gateway:
     def on_text(self, packet, interface):
         try:
             if isinstance(packet, dict):
-                pid = packet.get("id")
-                try:
-                    pid_int = int(pid) if pid is not None else None
-                except Exception:
-                    pid_int = None
-                if _seen_text_packet_id(pid_int):
-                    return
-                ch_idx_val = safe_get(packet, "channel", default=None)
-                ch_name = channel_name_for(self.db, self.my_id, ch_idx_val)
-                txt = safe_get(packet, "decoded", "text", default="")
-                # Skip storing service-command DMs (e.g. "wx EFHK") in the Inbox.
-                if not is_service_command(txt):
-                    log_incoming_text(self.db, packet, channel_name=ch_name)
-                print(f"[GW] IN {packet.get('fromId')} -> {packet.get('toId')}: {txt}")
+                self._handle_text_packet(packet)
         except Exception as e:
             print("[GW] Failed to log incoming text:", e)
+
+    def _handle_text_packet(self, packet: Dict[str, Any]) -> None:
+        """Shared by on_text and on_any_packet (whichever fires first wins;
+        the packet-id de-dup makes the second call a no-op). Logs the text
+        to the DB unless it is a service command, and queues service replies."""
+        pid = packet.get("id")
+        try:
+            pid_int = int(pid) if pid is not None else None
+        except Exception:
+            pid_int = None
+        if _seen_text_packet_id(pid_int):
+            return
+        txt = safe_get(packet, "decoded", "text", default="") or ""
+        try:
+            # Skip storing service-command DMs (e.g. "wx EFHK") in the Inbox.
+            if not is_service_command(txt):
+                ch_name = channel_name_for(self.db, self.my_id, safe_get(packet, "channel", default=None))
+                log_incoming_text(self.db, packet, channel_name=ch_name)
+        except Exception as e:
+            print(f"[GW] Failed to log incoming text: {e}")
+        try:
+            self._maybe_queue_service(packet, txt)
+        except Exception as e:
+            try:
+                debug_add({'ts': iso_now(), 'type': 'svc', 'note': f'service dispatch error: {e}'})
+            except Exception:
+                pass
+        print(f"[GW] IN {packet.get('fromId')} -> {packet.get('toId')}: {txt}")
+
+    def _maybe_queue_service(self, packet: Dict[str, Any], text_in: str) -> None:
+        """If text_in is a service command sent as a DM, queue a reply job."""
+        cmd = match_service_command(text_in)
+        if not cmd:
+            return
+        service, query = cmd
+        enabled = get_setting(self.db, METAR_ENABLED_KEY, "1")
+        if enabled not in ("1", "true", "yes", "on"):
+            return
+        to_id = packet.get("toId") or int_to_node_id(packet.get("to"))
+        sender_id = packet.get("fromId") or int_to_node_id(packet.get("from"))
+        if not to_id or not sender_id or is_broadcast_id(to_id):
+            return  # services only answer private DMs
+        ch = packet.get("channel")
+        try:
+            ch_i = int(ch) if ch is not None else None
+        except Exception:
+            ch_i = None
+        job = {"service": service, "query": query, "sender_id": sender_id,
+               "to_id": to_id, "channel": ch_i}
+        try:
+            self.svc_queue.put_nowait(job)
+        except queue.Full:
+            log_service_event(self.db, service, sender_id, to_id, query, "fail", "service queue full")
+
+    def _service_worker(self) -> None:
+        while not self.stop_event.is_set():
+            try:
+                job = self.svc_queue.get(timeout=1)
+            except queue.Empty:
+                continue
+            try:
+                self._run_service_job(job)
+            except Exception as e:
+                print(f"[GW] service worker error: {e}")
+                try:
+                    debug_add({'ts': iso_now(), 'type': 'svc', 'note': f'service worker error: {e}'})
+                except Exception:
+                    pass
+
+    def _run_service_job(self, job: Dict[str, Any]) -> None:
+        service = job["service"]; query = job["query"]
+        sender_id = job["sender_id"]; to_id = job["to_id"]
+        log_service_event(self.db, service, sender_id, to_id, query, "req", "")
+        builder = SERVICE_REPLY_BUILDERS.get(service)
+        reply = builder(query) if builder else f"Unknown service {service}"
+        try:
+            delay = int(get_setting(self.db, METAR_DELAY_KEY, "3") or 3)
+        except Exception:
+            delay = 3
+        time.sleep(max(0, min(delay, 60)))
+        sent_ok = False
+        if self.iface is not None:
+            try:
+                # DM reply; channel index is not required for PKI DMs
+                self.iface.sendText(reply, destinationId=sender_id)
+                sent_ok = True
+                log_service_event(self.db, service, sender_id, to_id, query, "ok", reply)
+            except Exception as e_send:
+                debug_add({'ts': iso_now(), 'fromId': sender_id, 'type': 'svc', 'note': f'{service} sendText failed: {e_send}'})
+                log_service_event(self.db, service, sender_id, to_id, query, "fail", f"sendText: {e_send}")
+        if not sent_ok:
+            try:
+                queue_outbox(self.db, sender_id, job.get("channel"), reply)
+                log_service_event(self.db, service, sender_id, to_id, query, "queued", reply)
+            except Exception as e_q:
+                debug_add({'ts': iso_now(), 'fromId': sender_id, 'type': 'svc', 'note': f'{service} queue failed: {e_q}'})
+                log_service_event(self.db, service, sender_id, to_id, query, "fail", f"queue: {e_q}")
 
     def send_text(self, text: str, to_id: Optional[str] = None, channel: Optional[int] = None,
                   want_ack: bool = False, on_response=None):
@@ -2159,8 +2150,11 @@ def home():
 
 @app.get("/inbox")
 def inbox():
-    limit = int(request.args.get("limit", "50"))
-    limit = 50 if limit not in (50, 100, 500) else limit
+    try:
+        limit = int(request.args.get("limit", "50"))
+    except Exception:
+        limit = 50
+    limit = limit if limit in (50, 200, 1000) else 50
     msgs = list_inbox(DB_CONN, limit=limit)
     return render_template("inbox.html", host=HOST, extra_head="", rows=msgs, limit=limit)
 
@@ -2207,8 +2201,11 @@ def inbox_mark_all_read_post():
 
 @app.get("/outbox")
 def outbox_view():
-    limit = int(request.args.get("limit", "50"))
-    limit = 50 if limit not in (50, 100, 500) else limit
+    try:
+        limit = int(request.args.get("limit", "50"))
+    except Exception:
+        limit = 50
+    limit = limit if limit in (50, 200, 1000) else 50
     msgs = list_outbox(DB_CONN, limit=limit)
     return render_template("outbox.html", host=HOST, extra_head="", rows=msgs, limit=limit)
 
@@ -2300,6 +2297,19 @@ def send_form():
     win_sec = parse_window_to_seconds(window)
     rows = list_active_nodes(DB_CONN, win_sec)
     to_id_prefill = (request.args.get("to_id", "") or "").strip()
+    # If the reply target hasn't been heard inside the window it would be
+    # missing from the dropdown and the browser would silently fall back to
+    # BROADCAST. Always add it, so a "Reply" can never turn into a broadcast.
+    if to_id_prefill and not any(r["node_id"] == to_id_prefill for r in rows):
+        DB_CONN.row_factory = sqlite3.Row
+        with DB_LOCK:
+            cur = DB_CONN.cursor()
+            cur.execute("SELECT node_id, long_name, short_name, last_rssi, last_snr "
+                        "FROM nodes WHERE node_id = ? LIMIT 1", (to_id_prefill,))
+            nr = cur.fetchone()
+        extra = dict(nr) if nr else {"node_id": to_id_prefill, "long_name": None,
+                                     "short_name": None, "last_rssi": None, "last_snr": None}
+        rows = [extra] + list(rows)
     channels = build_channel_options(DB_CONN, gateway.my_id)
     return render_template("send.html", host=HOST, extra_head="",
                            rows=rows, window=window,
@@ -2720,13 +2730,8 @@ def status_remove_node():
                 pass
     except Exception as e:
         msg = f"error: {e}"
-    qs = (
-        "manual_remove=1"
-        f"&node_id={node_id}"
-        f"&ok={'1' if ok else '0'}"
-        f"&msg={msg.replace(' ', '+')}"
-    )
-    return redirect(url_for("status_view") + "?" + qs)
+    return redirect(url_for("status_view", manual_remove="1", node_id=node_id,
+                            ok=("1" if ok else "0"), msg=msg))
 
 
 # -------------------------

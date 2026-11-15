@@ -2,6 +2,16 @@
 # Copy api_keys.py.example to api_keys.py and fill in your own key(s).
 api_keys.py
 
+# Per-machine settings (HOST, port, DB path). Copy local_config.py.example.
+local_config.py
+
+# Live database -- contains private messages and position history.
+# Each install creates its own on first start. Never commit it.
+meshtastic_messages.db
+meshtastic_messages.db-wal
+meshtastic_messages.db-shm
+*.db-journal
+
 # Python
 __pycache__/
 *.pyc

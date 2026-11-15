@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -19,43 +19,86 @@
     })();
   </script>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
-<div class="container">
-  <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
-    <h3 class="m-0 me-3">Meshtastic Gateway</h3>
-    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('inbox') }}">Inbox</a>
-    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('outbox_view') }}">Outbox</a>
-    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('nodes') }}">Active Nodes</a>
-    <a id="broadcastNavBtn" class="btn btn-outline-primary btn-sm" href="{{ url_for('broadcast') }}">Broadcast</a>
-    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('chat_index') }}">Chat</a>
-    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('map_view') }}">Map</a>
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('debug_view') }}">Debug</a>
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('status_view') }}">Status</a>
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('services_view') }}">Services</a>
-    <a class="btn btn-primary btn-sm" href="{{ url_for('send_form') }}">Send</a>
-    <button type="button" class="btn btn-outline-secondary btn-sm" id="themeToggle" title="Toggle dark/light theme">Theme</button>
-    <a id="newMsgBadge"
-       href="{{ url_for('inbox') }}"
-       class="ms-auto text-decoration-none fw-bold"
-       style="display:none; color:#dc3545;"
-       title="You have unread direct messages">
-      <span id="newMsgText">New message</span>
+{% set ep = request.endpoint %}
+{% set nav_items = [
+  ('inbox',         'Inbox',        'bi-inbox',        ['inbox']),
+  ('outbox_view',   'Outbox',       'bi-send-check',   ['outbox_view']),
+  ('nodes',         'Active Nodes', 'bi-diagram-3',    ['nodes']),
+  ('broadcast',     'Broadcast',    'bi-megaphone',    ['broadcast']),
+  ('chat_index',    'Chat',         'bi-chat-dots',    ['chat_index', 'chat_with']),
+  ('map_view',      'Map',          'bi-geo-alt',      ['map_view']),
+  ('debug_view',    'Debug',        'bi-terminal',     ['debug_view']),
+  ('status_view',   'Status',       'bi-activity',     ['status_view']),
+  ('services_view', 'Services',     'bi-cloud-sun',    ['services_view']),
+] %}
+<nav class="navbar navbar-expand-lg sticky-top mg-navbar">
+  <div class="container-xl">
+    <a class="navbar-brand" href="{{ url_for('nodes') }}">
+      <span class="mg-logo"><i class="bi bi-broadcast-pin"></i></span>
+      <span>Meshtastic Gateway</span>
     </a>
+
+    <div class="d-flex align-items-center gap-2 order-lg-last ms-auto ms-lg-2">
+      <a id="newMsgBadge" href="{{ url_for('inbox') }}"
+         class="btn btn-danger btn-sm rounded-pill" style="display:none;"
+         title="You have unread direct messages">
+        <i class="bi bi-envelope-fill"></i> <span id="newMsgText">New message</span>
+      </a>
+      <button type="button" class="btn btn-outline-secondary btn-sm mg-icon-btn" id="themeToggle" title="Toggle dark/light theme">
+        <i class="bi bi-moon-stars" id="themeIcon"></i>
+      </button>
+      <a class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1" href="{{ url_for('send_form') }}">
+        <i class="bi bi-pencil-square"></i><span class="d-none d-sm-inline">Send</span>
+      </a>
+      <button class="navbar-toggler btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#mgNav"
+              aria-controls="mgNav" aria-expanded="false" aria-label="Menu">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+    </div>
+
+    <div class="collapse navbar-collapse" id="mgNav">
+      <ul class="navbar-nav me-auto gap-lg-1 mt-2 mt-lg-0">
+        {% for endpoint, label, icon, actives in nav_items %}
+          <li class="nav-item">
+            <a class="nav-link {% if ep in actives %}active{% endif %}"
+               {% if endpoint == 'broadcast' %}id="broadcastNavBtn"{% endif %}
+               href="{{ url_for(endpoint) }}">
+              <i class="bi {{ icon }}"></i>{{ label }}
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
   </div>
+</nav>
+
+<main class="container-xl py-4">
   {% block body %}{% endblock %}
-  <hr class="mt-4">
-  <div class="text-muted small">TCP radio: <span class="mono">{{ host }}</span></div>
-</div>
+</main>
+
+<footer class="mg-footer">
+  <div class="container-xl d-flex flex-wrap justify-content-between gap-2">
+    <span><i class="bi bi-router"></i> TCP radio: <span class="mono">{{ host }}</span></span>
+    <span>All times UTC</span>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+  // Theme toggle (persisted in localStorage['mg-theme']).
   (function () {
     var btn = document.getElementById('themeToggle');
+    var icon = document.getElementById('themeIcon');
     if (!btn) return;
     function setLabel() {
       var t = document.documentElement.getAttribute('data-bs-theme') || 'light';
-      btn.textContent = (t === 'dark') ? 'Light mode' : 'Dark mode';
+      if (icon) icon.className = 'bi ' + (t === 'dark' ? 'bi-sun' : 'bi-moon-stars');
+      btn.title = (t === 'dark') ? 'Switch to light mode' : 'Switch to dark mode';
     }
     setLabel();
     btn.addEventListener('click', function () {
@@ -64,6 +107,56 @@
       document.documentElement.setAttribute('data-bs-theme', next);
       try { localStorage.setItem('mg-theme', next); } catch (e) {}
       setLabel();
+    });
+  })();
+</script>
+<script>
+  // Auto-refresh dropdowns (Off / 10s / 30s / 60s), persisted per page via data-key.
+  (function () {
+    var sels = document.querySelectorAll('select.mg-refresh');
+    sels.forEach(function (sel) {
+      var key = sel.getAttribute('data-key');
+      try {
+        var saved = localStorage.getItem(key);
+        if (saved !== null) {
+          for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === saved) { sel.value = saved; break; }
+          }
+        }
+      } catch (e) {}
+      var timer = null;
+      function applyRate() {
+        if (timer) { clearInterval(timer); timer = null; }
+        var sec = parseInt(sel.value, 10) || 0;
+        if (sec > 0) {
+          timer = setInterval(function () {
+            // Don't reload while the user is typing a message.
+            var a = document.activeElement;
+            if (a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT') && a.value) return;
+            location.reload();
+          }, sec * 1000);
+        }
+      }
+      sel.addEventListener('change', function () {
+        try { localStorage.setItem(key, sel.value); } catch (e) {}
+        applyRate();
+      });
+      applyRate();
+    });
+  })();
+</script>
+<script>
+  // Character counters for message boxes (Meshtastic payload is ~240 bytes).
+  (function () {
+    document.querySelectorAll('textarea[data-counter]').forEach(function (ta) {
+      var out = document.getElementById(ta.getAttribute('data-counter'));
+      if (!out) return;
+      function upd() {
+        var bytes = new TextEncoder().encode(ta.value).length;
+        out.textContent = bytes + ' / 240 bytes';
+        out.classList.toggle('text-danger', bytes > 240);
+      }
+      ta.addEventListener('input', upd); upd();
     });
   })();
 </script>
@@ -92,8 +185,8 @@
   })();
 </script>
 <script>
-  // Tint the Broadcast navbar button red when new broadcast messages
-  // have arrived since the user last viewed the Broadcast page.
+  // Highlight the Broadcast nav item red when new broadcasts have arrived
+  // since the user last viewed the Broadcast page.
   (function () {
     var btn = document.getElementById('broadcastNavBtn');
     if (!btn) return;
@@ -103,14 +196,11 @@
         .then(function (j) {
           var n = (j && typeof j.unread === 'number') ? j.unread : 0;
           if (n > 0) {
-            btn.classList.remove('btn-outline-primary');
-            btn.classList.add('btn-outline-danger');
-            btn.setAttribute('title',
-              n === 1 ? '1 new broadcast since last visit'
-                      : (n + ' new broadcasts since last visit'));
+            btn.classList.add('has-unread');
+            btn.setAttribute('title', n === 1 ? '1 new broadcast since last visit'
+                                              : (n + ' new broadcasts since last visit'));
           } else {
-            btn.classList.remove('btn-outline-danger');
-            btn.classList.add('btn-outline-primary');
+            btn.classList.remove('has-unread');
             btn.removeAttribute('title');
           }
         })

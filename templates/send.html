@@ -1,13 +1,15 @@
 {% extends "base.html" %}
-{% block extra_head %}
-
-{% endblock %}
 {% block body %}
-<h5 class="mb-3">Send message</h5>
+<div class="page-head">
+  <h5><i class="bi bi-pencil-square"></i> Send message</h5>
+</div>
+
+<div class="row">
+  <div class="col-lg-8">
     <form method="post" action="{{ url_for('send_post') }}" class="card card-body">
       <div class="mb-3">
-        <label class="form-label">Destination</label>
-        <select class="form-select" name="to_id">
+        <label class="form-label fw-medium">Destination</label>
+        <select class="form-select" name="to_id" id="destSel">
           <option value="" {{ "selected" if not to_id_prefill else "" }}>BROADCAST (pick channel below)</option>
           {% for r in rows %}
             <option value="{{ r['node_id'] }}" {{ "selected" if r['node_id']==to_id_prefill else "" }}>
@@ -15,11 +17,11 @@
             </option>
           {% endfor %}
         </select>
-        <div class="form-text">Dropdown uses nodes heard in window={{window}}.</div>
+        <div class="form-text">Dropdown uses nodes heard in window={{ window }}{% if to_id_prefill %} (plus the reply target){% endif %}.</div>
       </div>
 
-      <div class="mb-3">
-        <label class="form-label">Broadcast channel</label>
+      <div class="mb-3" id="chanBlock">
+        <label class="form-label fw-medium">Broadcast channel</label>
         <select class="form-select" name="channel">
           {% for c in channels %}
             <option value="{{ c.index }}" {% if c.index == selected_channel %}selected{% endif %}>{{ c.label }}</option>
@@ -29,11 +31,26 @@
       </div>
 
       <div class="mb-3">
-        <label class="form-label">Message</label>
-        <textarea class="form-control" name="text" rows="3" maxlength="240" required></textarea>
+        <label class="form-label fw-medium">Message</label>
+        <textarea class="form-control" name="text" rows="3" maxlength="240" required data-counter="sendCount"></textarea>
+        <div class="char-count" id="sendCount"></div>
       </div>
 
-      <button class="btn btn-primary" type="submit">Queue message</button>
-      <a class="btn btn-outline-secondary" href="{{ url_for('outbox_view') }}">Outbox</a>
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary" type="submit"><i class="bi bi-send"></i> Queue message</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('outbox_view') }}">Outbox</a>
+      </div>
     </form>
+  </div>
+</div>
+
+<script>
+  // Dim the channel picker when a DM destination is selected (it's ignored then).
+  (function () {
+    var dest = document.getElementById('destSel'), blk = document.getElementById('chanBlock');
+    if (!dest || !blk) return;
+    function upd() { blk.style.opacity = dest.value ? '0.45' : '1'; }
+    dest.addEventListener('change', upd); upd();
+  })();
+</script>
 {% endblock %}

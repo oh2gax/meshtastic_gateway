@@ -285,6 +285,10 @@ async def shoot(chrome: str | None, assets: str | None) -> None:
             ctx = await browser.new_context(viewport={"width": width, "height": height},
                                             device_scale_factor=scale)
             await ctx.add_init_script(f"try{{localStorage.setItem('mg-theme','{theme}')}}catch(e){{}}")
+            # show the lists sorted by distance in the figures
+            await ctx.add_init_script("try{if(!localStorage.getItem('mg-nodes-sort'))localStorage.setItem('mg-nodes-sort',"
+                                      "JSON.stringify({key:'dist',dir:'asc'}));if(!localStorage.getItem('mg-map-sort'))"
+                                      "localStorage.setItem('mg-map-sort',JSON.stringify({key:'dist',dir:'asc'}))}catch(e){}")
 
             async def route(r):
                 url = r.request.url

@@ -29,6 +29,16 @@
           <div class="card-title-sm mb-0">Nodes <span class="text-lowercase fw-normal">(click to zoom)</span></div>
           <button class="btn btn-sm btn-outline-secondary" id="clearTracksBtn" title="Clear tracks"><i class="bi bi-x-circle"></i> Tracks</button>
         </div>
+        <div class="d-flex align-items-center gap-1 mb-2 px-1">
+          <span class="small text-body-secondary">Sort</span>
+          <select id="mapSort" class="form-select form-select-sm" style="width:auto">
+            <option value="seen">Last seen</option>
+            <option value="dist">Distance</option>
+            <option value="name">Name</option>
+            <option value="hops">Hops</option>
+          </select>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="mapSortDir" title="Reverse the order"><i class="bi bi-sort-down"></i></button>
+        </div>
         <div id="nodeList"></div>
       </div>
     </div>
@@ -126,7 +136,48 @@
     `;
   }
 
+  // ---- Sorting of the node list (kept in localStorage) ----
+  const SORT_KEY = "mg-map-sort";
+  const FIRST_DIR = {seen: "desc", dist: "asc", name: "asc", hops: "asc"};
+  let mapSort = {key: "seen", dir: "desc"};
+  try { mapSort = Object.assign(mapSort, JSON.parse(localStorage.getItem(SORT_KEY) || "{}")); } catch (e) {}
+  let lastNodes = [];
+  function sortNodes(nodes) {
+    const val = (n) => {
+      if (mapSort.key === "seen") return n.last_seen_ts;
+      if (mapSort.key === "dist") return n.distance_km;
+      if (mapSort.key === "hops") return n.hops;
+      return (n.name && n.name !== n.node_id) ? n.name.toLowerCase() : null;   // nameless last
+    };
+    return nodes.slice().sort((a, b) => {
+      const x = val(a), y = val(b);
+      if (x == null && y == null) return 0;
+      if (x == null) return 1;            // unknown values always last
+      if (y == null) return -1;
+      const c = (typeof x === "string") ? x.localeCompare(y) : (x - y);
+      return mapSort.dir === "asc" ? c : -c;
+    });
+  }
+  function showSortState() {
+    document.getElementById("mapSort").value = mapSort.key;
+    const b = document.getElementById("mapSortDir");
+    b.innerHTML = mapSort.dir === "asc" ? '<i class="bi bi-sort-up"></i>' : '<i class="bi bi-sort-down"></i>';
+    b.title = (mapSort.dir === "asc" ? "Ascending" : "Descending") + " – click to reverse";
+  }
+  function saveSort() { try { localStorage.setItem(SORT_KEY, JSON.stringify(mapSort)); } catch (e) {} }
+  showSortState();
+  document.getElementById("mapSort").addEventListener("change", (ev) => {
+    mapSort = {key: ev.target.value, dir: FIRST_DIR[ev.target.value] || "asc"};
+    saveSort(); showSortState(); setNodeList(lastNodes);
+  });
+  document.getElementById("mapSortDir").addEventListener("click", () => {
+    mapSort.dir = mapSort.dir === "asc" ? "desc" : "asc";
+    saveSort(); showSortState(); setNodeList(lastNodes);
+  });
+
   function setNodeList(nodes) {
+    lastNodes = nodes;
+    nodes = sortNodes(nodes);
     const el = document.getElementById("nodeList");
     el.innerHTML = "";
     if (!nodes.length) {
@@ -138,7 +189,7 @@
       item.className = "p-2 rounded nodeitem";
 
       const checked = selectedTracks.has(n.node_id) ? "checked" : "";
-      const distStr = (n.distance_km != null) ? ` · ${Number(n.distance_km).toFixed(1)} km` : "";
+      const distStr = (n.distance_km != null) ? ` · <span class="text-nowrap">${Number(n.distance_km).toFixed(1)} km</span>` : "";
       const hopsStr = (n.hops != null) ? ` · Hops ${esc(n.hops)}` : "";
       item.innerHTML = `
         <div class="d-flex justify-content-between align-items-start gap-2">

@@ -20,16 +20,28 @@
 
 <div class="card table-card">
   <div class="table-responsive">
-  <table class="table table-sm table-hover align-middle">
+  <table class="table table-sm table-hover align-middle" id="nodesTable">
     <thead><tr>
-      <th>Last seen</th><th>Node</th><th>Name</th><th>HW</th><th>RSSI</th><th>SNR</th>
+      <th class="sortable" data-key="seen" data-type="num" title="Sort by last seen">Last seen</th>
+      <th>Node</th>
+      <th class="sortable" data-key="name" data-type="text" title="Sort by name">Name</th>
+      <th>HW</th>
+      <th class="sortable" data-key="rssi" data-type="num" title="Sort by RSSI">RSSI</th>
+      <th class="sortable" data-key="snr" data-type="num" title="Sort by SNR">SNR</th>
       <th title="Position known?">Pos</th>
-      <th title="Hops travelled (0 = direct neighbor)">Hops</th>
+      <th class="sortable" data-key="hops" data-type="num" title="Hops travelled (0 = direct neighbor). Click to sort.">Hops</th>
+      <th class="sortable text-end" data-key="dist" data-type="num"
+          title="{% if own_pos_known %}Distance from the gateway (km). Click to sort.{% else %}The gateway's own position is not known, so distances cannot be calculated.{% endif %}">Distance</th>
       <th></th>
     </tr></thead>
     <tbody>
     {% for r in rows %}
-      <tr>
+      <tr data-seen="{{ r['last_seen_ts'] or '' }}"
+          data-name="{{ node_display(r['long_name'], r['short_name'], '')|lower }}"
+          data-rssi="{{ r['last_rssi'] if r['last_rssi'] is not none else '' }}"
+          data-snr="{{ r['last_snr'] if r['last_snr'] is not none else '' }}"
+          data-hops="{{ r['last_hops'] if r['last_hops'] is not none else '' }}"
+          data-dist="{{ r['distance_km'] if r['distance_km'] is not none else '' }}">
         <td class="mono small text-nowrap">{{ r["last_seen_iso"]|replace(" UTC", "") }}</td>
         <td class="node-id">{{ r["node_id"] }}</td>
         <td class="fw-medium">{{ node_display(r["long_name"], r["short_name"], r["node_id"]) }}</td>
@@ -41,6 +53,11 @@
         </td>
         <td class="mono">
           {% if r["last_hops"] is not none %}{{ r["last_hops"] }}{% else %}<span class="dim">—</span>{% endif %}
+        </td>
+        <td class="mono small text-end text-nowrap">
+          {% if r["node_id"] == my_id %}<span class="dim" title="This gateway">gateway</span>
+          {% elif r["distance_km"] is not none %}{{ '%.1f'|format(r["distance_km"]) }} km
+          {% else %}<span class="dim">—</span>{% endif %}
         </td>
         <td>
           <div class="row-actions">
@@ -66,10 +83,62 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="9" class="empty-state"><i class="bi bi-diagram-3"></i>No nodes heard in this window.</td></tr>
+      <tr><td colspan="10" class="empty-state"><i class="bi bi-diagram-3"></i>No nodes heard in this window.</td></tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
 </div>
+<script>
+  // Click a column header to sort; click again to reverse. Empty values
+  // (no position, no hops ...) always go to the end. The choice is kept in
+  // localStorage, so it survives the auto-refresh.
+  (function () {
+    var table = document.getElementById('nodesTable');
+    if (!table) return;
+    var tbody = table.tBodies[0];
+    var heads = table.querySelectorAll('th.sortable');
+    var KEY = 'mg-nodes-sort';
+    function value(tr, key, type) {
+      var v = tr.getAttribute('data-' + key);
+      if (v === null || v === '') return null;
+      return type === 'num' ? parseFloat(v) : v;
+    }
+    function apply(key, dir) {
+      var th = table.querySelector('th.sortable[data-key="' + key + '"]');
+      if (!th) return;
+      var type = th.getAttribute('data-type');
+      var rows = Array.prototype.slice.call(tbody.rows).filter(function (r) { return r.hasAttribute('data-seen'); });
+      rows.sort(function (a, b) {
+        var x = value(a, key, type), y = value(b, key, type);
+        if (x === null && y === null) return 0;
+        if (x === null) return 1;
+        if (y === null) return -1;
+        var c = (type === 'num') ? (x - y) : x.localeCompare(y);
+        return dir === 'asc' ? c : -c;
+      });
+      rows.forEach(function (r) { tbody.appendChild(r); });
+      heads.forEach(function (h) {
+        h.classList.remove('sort-asc', 'sort-desc');
+        h.removeAttribute('aria-sort');
+      });
+      th.classList.add(dir === 'asc' ? 'sort-asc' : 'sort-desc');
+      th.setAttribute('aria-sort', dir === 'asc' ? 'ascending' : 'descending');
+    }
+    var state = null;
+    try { state = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
+    if (state && state.key) apply(state.key, state.dir);
+    heads.forEach(function (th) {
+      th.addEventListener('click', function () {
+        var key = th.getAttribute('data-key');
+        // Text sorts A-Z first; numbers: distance and hops nearest first, the rest highest first.
+        var first = (th.getAttribute('data-type') === 'text' || key === 'dist' || key === 'hops') ? 'asc' : 'desc';
+        var dir = (state && state.key === key) ? (state.dir === 'asc' ? 'desc' : 'asc') : first;
+        state = { key: key, dir: dir };
+        try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+        apply(key, dir);
+      });
+    });
+  })();
+</script>
 {% endblock %}

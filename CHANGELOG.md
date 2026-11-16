@@ -45,7 +45,12 @@ User-facing notes are in `doc/whats_new.md` (shown in the What's new window).
 - **Broadcast "All channels"** — `/broadcast?channel=all` (the default) lists every channel; each message
   gets a channel tag (current channel map label, falling back to the stored `channel_name`, colour by
   index). Sending from the All view uses a channel picker; `back` keeps the view after sending.
-- User guide 1.5 with Traceroute, the new Services page, the ACK hops and broadcast hops; demo data and screenshots.
+- **Active Nodes distance** — `distance_km` from the gateway's own last position (haversine, as on the
+  map); new Distance column. Client-side sorting on Last seen, Name, RSSI, SNR, Hops and Distance
+  (`th.sortable`, `data-*` values on the rows, empty values last, state in `localStorage['mg-nodes-sort']`).
+- **Map list sorting** — Sort selector (last seen / distance / name / hops) and direction button,
+  applied on every 5-second refresh, state in `localStorage['mg-map-sort']`.
+- User guide 1.6 with Traceroute, the new Services page, the ACK hops and broadcast hops; demo data and screenshots.
 
 ## [2026-11-15]
 

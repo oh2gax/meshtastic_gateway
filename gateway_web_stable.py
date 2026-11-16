@@ -3118,13 +3118,33 @@ def send_post():
 def nodes():
     window = request.args.get("window", DEFAULT_ACTIVE_WINDOW)
     win_sec = parse_window_to_seconds(window)
-    rows = list_active_nodes(DB_CONN, win_sec)
+    # Distance from the gateway's own last known position (as on the map).
+    own = None
+    if gateway.my_id:
+        DB_CONN.row_factory = sqlite3.Row
+        with DB_LOCK:
+            cur = DB_CONN.cursor()
+            cur.execute("SELECT last_lat, last_lon FROM nodes WHERE node_id = ? LIMIT 1", (gateway.my_id,))
+            me = cur.fetchone()
+        if me and me["last_lat"] is not None and me["last_lon"] is not None:
+            own = (float(me["last_lat"]), float(me["last_lon"]))
+    rows = []
+    for r in list_active_nodes(DB_CONN, win_sec):
+        d = dict(r)
+        d["distance_km"] = None
+        if own and d.get("last_lat") is not None and d.get("last_lon") is not None:
+            try:
+                d["distance_km"] = round(haversine_km(own[0], own[1], float(d["last_lat"]), float(d["last_lon"])), 1)
+            except Exception:
+                pass
+        rows.append(d)
     try:
         hop_default = int(get_setting(DB_CONN, TRACEROUTE_HOPS_KEY, str(TRACEROUTE_DEFAULT_HOPS)))
     except Exception:
         hop_default = TRACEROUTE_DEFAULT_HOPS
     return render_template("nodes.html", host=HOST, extra_head="", rows=rows, window=window,
-                           hop_default=hop_default, my_id=(gateway.my_id or ""))
+                           hop_default=hop_default, my_id=(gateway.my_id or ""),
+                           own_pos_known=own is not None)
 
 @app.get("/chat", endpoint="chat_index")
 def chat_index():

@@ -43,7 +43,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\itshape Meshtastic Gateway --- how to read and use the web page}
-\fancyhead[R]{\small\itshape User guide, version 1.5 --- November 2026}
+\fancyhead[R]{\small\itshape User guide, version 1.6 --- November 2026}
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0.3pt}
 \hypersetup{pdftitle={Meshtastic Gateway - User guide},pdfauthor={Otso Laakso, OH2GAX}}
@@ -69,7 +69,7 @@
 \begin{document}
 \thispagestyle{plain}
 \begin{center}
-{\small Meshtastic Gateway project \quad$\cdot$\quad User guide, version 1.5 \quad$\cdot$\quad 16 November 2026}\par\vspace{10pt}
+{\small Meshtastic Gateway project \quad$\cdot$\quad User guide, version 1.6 \quad$\cdot$\quad 16 November 2026}\par\vspace{10pt}
 {\LARGE\bfseries Meshtastic Gateway}\par\vspace{5pt}
 {\large\bfseries How to read and use the web page:\\ nodes, messages, the map, services and the gateway itself}\par\vspace{8pt}
 {\normalsize Otso Laakso (OH2GAX)}\par
@@ -165,7 +165,7 @@ On a narrow screen the page names fold into the \ui{$\equiv$} menu button (Figur
 \figpair{phone_outbox.jpg}{phone_menu.jpg}{fig:phone}{}{On a phone. Left: the Outbox. Right: the menu opened with the \ui{$\equiv$} button.}
 
 \section{Active Nodes}\label{sec:nodes}
-\fig{nodes.jpg}{1.0}{Active Nodes with the window \ui{1d}: twelve nodes heard in the last day, newest first.}
+\fig{nodes.jpg}{1.0}{Active Nodes with the window \ui{1d}: twelve nodes heard in the last day, sorted by distance from the gateway (the blue $\blacktriangle$ in the \ui{Distance} heading).}
 
 The start page lists every node heard within the chosen \textbf{window}: \ui{2h} (the default), \ui{6h}, \ui{1d}, \ui{1w} or \ui{1m} (30 days). The chips next to the title repeat the window and the number of nodes (\ui{count=12}).
 
@@ -180,8 +180,11 @@ HW & The hardware model the node reports, e.g.\ \cmd{HELTEC\_V3}, \cmd{RAK4631},
 RSSI, SNR & Signal strength and signal-to-noise ratio of the last packet received from it. For a node more than 0~hops away these describe the \emph{last relay}, not the node itself. \\
 Pos & \textcolor{ackY}{Y} when the node has sent a position, --- when not. \\
 Hops & Hops of the most recent packet: 0 = heard directly, --- = unknown. \\
+Distance & How far the node's last position is from the gateway's own position, in km; --- when either position is unknown. \\
 \bottomrule
 \end{tabularx}
+
+\lead{Sorting.} Click a column heading --- \ui{Last seen}, \ui{Name}, \ui{RSSI}, \ui{SNR}, \ui{Hops} or \ui{Distance} --- to sort the list by it; click again to reverse the order. The heading shows $\blacktriangle$ or $\blacktriangledown$. Nodes without a value (no position, no name \dots) always come last. The page remembers the order, also when it refreshes itself; at first it is the newest first.
 
 The buttons at the end of a row are, from the left: the green \textbf{traceroute} button with its small \ui{$\blacktriangledown$} (Section~\ref{sec:trace}), \ui{Chat} with that node and the \ui{Send} form addressed to it.
 
@@ -268,7 +271,7 @@ The Send form writes a new message.
 The map shows the last known position of every node that has sent one and was heard within the \textbf{window} (\ui{2h} \dots\ \ui{1m}).
 \begin{itemize}[leftmargin=1.2em]
 \item \textbf{Circles}: \textcolor{ackY}{green} when the node was heard in the last 15 minutes, \textcolor{accent}{blue} when earlier. Point at a circle to see the short name; click it for the details: name, ID, hardware, last seen, position time, RSSI/SNR, coordinates, hops and the distance from the gateway.
-\item \textbf{The list on the left} has the same nodes with ID, hops, signal and distance from the gateway (the gateway's own radio needs a position for the distances). Click a node to zoom to it.
+\item \textbf{The list on the left} has the same nodes with ID, hops, signal and distance from the gateway (the gateway's own radio needs a position for the distances). Click a node to zoom to it. \ui{Sort} orders the list by last seen, distance, name or hops, and the button next to it reverses the order; the choice is remembered.
 \item \textbf{Tracks}: tick \ui{track} for a node to draw where it has been. \ui{Track min} sets how many minutes back (up to 1440 = 24 hours, but never before local midnight). \ui{Tracks} clears them all.
 \item \ui{Refresh} redraws the map every 2, 5 or 10 seconds without reloading the page, so a moving node is followed.
 \end{itemize}
@@ -447,6 +450,7 @@ cd \textasciitilde/meshtastic\_gateway \&\& ./update.sh & Update to the newest v
 I want to \dots & Do this \\
 \midrule
 see who is on the air & \ui{Active Nodes}, window \ui{2h}; \ui{1d} or \ui{1w} for longer \\
+find the nearest or farthest nodes & \ui{Active Nodes}: click the \ui{Distance} heading (or \ui{Sort} on the map) \\
 see where they are & \ui{Map}; click a node in the list to zoom; tick \ui{track} for its route \\
 see the path to a node & the green route button in \ui{Active Nodes} (\ui{$\blacktriangledown$} for the hop limit), then \ui{Show on map} \\
 read new messages & the red envelope badge or \ui{Inbox}; a whole conversation: \ui{Chat} \\

@@ -43,7 +43,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\itshape Meshtastic Gateway --- how to read and use the web page}
-\fancyhead[R]{\small\itshape User guide, version 1.3 --- November 2026}
+\fancyhead[R]{\small\itshape User guide, version 1.4 --- November 2026}
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0.3pt}
 \hypersetup{pdftitle={Meshtastic Gateway - User guide},pdfauthor={Otso Laakso, OH2GAX}}
@@ -69,7 +69,7 @@
 \begin{document}
 \thispagestyle{plain}
 \begin{center}
-{\small Meshtastic Gateway project \quad$\cdot$\quad User guide, version 1.3 \quad$\cdot$\quad 16 November 2026}\par\vspace{10pt}
+{\small Meshtastic Gateway project \quad$\cdot$\quad User guide, version 1.4 \quad$\cdot$\quad 16 November 2026}\par\vspace{10pt}
 {\LARGE\bfseries Meshtastic Gateway}\par\vspace{5pt}
 {\large\bfseries How to read and use the web page:\\ nodes, messages, the map, services and the gateway itself}\par\vspace{8pt}
 {\normalsize Otso Laakso (OH2GAX)}\par
@@ -239,11 +239,12 @@ The Chat page shows the direct messages exchanged with one node as a conversatio
 \end{itemize}
 
 \section{Broadcast}\label{sec:broadcast}
-\fig{broadcast.jpg}{1.0}{The primary channel. Messages from other nodes are on the left with their signal, the gateway's own on the right.}
+\fig{broadcast.jpg}{1.0}{The primary channel. Messages from other nodes are on the left with their hops and signal, the gateway's own on the right.}
 
 The Broadcast page is the public side: the messages sent to everybody on one channel.
 \begin{itemize}[leftmargin=1.2em]
 \item The \ui{Channel} list shows the channels configured in the radio, by slot number and name (\ui{0 $\cdot$ Primary}, \ui{1 $\cdot$ OH2GAX}). Disabled slots are not listed.
+\item Each received message shows its sender, the time, how many \textbf{hops} it travelled and the RSSI and SNR of its last hop, as in the Inbox.
 \item \ui{50 / 100 / 500} sets how many messages are shown.
 \item The box at the bottom sends a broadcast \textbf{on the channel that is selected}. While it waits in the outbox it is listed in a yellow \ui{Queued} box above the messages.
 \item Opening this page clears the red mark of \ui{Broadcast} in the top bar.

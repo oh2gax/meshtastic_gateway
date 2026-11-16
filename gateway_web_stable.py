@@ -2986,6 +2986,12 @@ def broadcast():
         cur.execute("""
         SELECT m.id, m.ts, m.ts_iso, m.direction, m.from_id, m.to_id, m.text, m.rx_rssi, m.rx_snr,
                m.channel, m.channel_name,
+               CASE
+                 WHEN m.hop_start IS NOT NULL AND m.hop_limit IS NOT NULL
+                      AND m.hop_start >= m.hop_limit
+                 THEN m.hop_start - m.hop_limit
+                 ELSE NULL
+               END AS hops,
                nf.long_name AS from_long, nf.short_name AS from_short
         FROM messages m
         LEFT JOIN nodes nf ON nf.node_id = m.from_id

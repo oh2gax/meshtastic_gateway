@@ -47,7 +47,10 @@
             <span class="who">Me</span>
           {% endif %}
           <span>{{ m["ts_iso"] }}</span>
-          {% if m["direction"] == "in" %}<span>&middot; RSSI {{ m["rx_rssi"] }}, SNR {{ m["rx_snr"] }}</span>{% endif %}
+          {% if m["direction"] == "in" %}
+            {% if m["hops"] is not none %}<span>&middot; Hops {{ m["hops"] }}</span>{% endif %}
+            <span>&middot; RSSI {{ m["rx_rssi"] }}, SNR {{ m["rx_snr"] }}</span>
+          {% endif %}
         </div>
         <div>{{ m["text"] }}</div>
       </div>

@@ -41,7 +41,8 @@ User-facing notes are in `doc/whats_new.md` (shown in the What's new window).
   (`acked`). Outbox and Chat show `Y n hops` with the signal in the tooltip.
 - `update_outbox_ack_by_packet` never downgrades `acked` (a late implicit ACK from a relay used to turn
   Y back into S).
-- User guide 1.3 with Traceroute, the new Services page and the ACK hops; demo data and screenshots.
+- Broadcast page shows the hops of received broadcasts (`hop_start - hop_limit`, as in Inbox and Chat).
+- User guide 1.4 with Traceroute, the new Services page, the ACK hops and broadcast hops; demo data and screenshots.
 
 ## [2026-11-15]
 

@@ -43,7 +43,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\itshape Meshtastic Gateway --- how to read and use the web page}
-\fancyhead[R]{\small\itshape User guide, version 1.2 --- November 2026}
+\fancyhead[R]{\small\itshape User guide, version 1.3 --- November 2026}
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0.3pt}
 \hypersetup{pdftitle={Meshtastic Gateway - User guide},pdfauthor={Otso Laakso, OH2GAX}}
@@ -69,7 +69,7 @@
 \begin{document}
 \thispagestyle{plain}
 \begin{center}
-{\small Meshtastic Gateway project \quad$\cdot$\quad User guide, version 1.2 \quad$\cdot$\quad 16 November 2026}\par\vspace{10pt}
+{\small Meshtastic Gateway project \quad$\cdot$\quad User guide, version 1.3 \quad$\cdot$\quad 16 November 2026}\par\vspace{10pt}
 {\LARGE\bfseries Meshtastic Gateway}\par\vspace{5pt}
 {\large\bfseries How to read and use the web page:\\ nodes, messages, the map, services and the gateway itself}\par\vspace{8pt}
 {\normalsize Otso Laakso (OH2GAX)}\par
@@ -202,7 +202,7 @@ The Inbox shows the \textbf{direct messages} sent to the gateway, newest first. 
 Service commands (\cmd{wx EFHK} and the others, Section~\ref{sec:services}) are not shown in the Inbox: they are commands to the gateway, not messages to you.
 
 \section{Outbox and the delivery marks}\label{sec:outbox}
-\fig{outbox.jpg}{1.0}{The Outbox: \ackY{} delivered, \ackS{} sent without confirmation and \dots\ still waiting.}
+\fig{outbox.jpg}{1.0}{The Outbox: \ackY{} delivered (with the hops the acknowledgement travelled back), \ackS{} sent without confirmation and \dots\ still waiting.}
 
 The Outbox lists the direct messages the gateway has sent or is about to send, newest first, with the destination, the text and the \textbf{Ack} mark. (Broadcasts are on the Broadcast page.) It refreshes itself every 10 seconds by default, so you can watch a mark change.
 
@@ -211,7 +211,7 @@ The Outbox lists the direct messages the gateway has sent or is about to send, n
 \toprule
 Ack & Meaning \\
 \midrule
-\ackY & \textbf{Delivered.} The destination node itself acknowledged the message (end-to-end ACK). \\
+\ackY & \textbf{Delivered.} The destination node itself acknowledged the message (end-to-end ACK). Next to it: how many hops the acknowledgement travelled back, e.g.\ \ui{Y 1 hop}; pointing at it shows the RSSI and SNR of its last hop. \\
 \ackS & \textbf{Sent, not confirmed.} The radio sent the message, but no ACK came from the destination. This covers three cases: an \emph{implicit} ACK (a relay was heard passing the message on), \emph{no ACK} at all after the radio's retries or within 3 minutes, and a \emph{negative} ACK (for example no route, or the destination's key unknown). \\
 \dots & \textbf{Waiting.} Sent within the last 3 minutes and no outcome yet. \\
 --- & \textbf{Not applicable.} The radio never accepted the message, so there is nothing to acknowledge; the reason is shown in red under the row. \\
@@ -220,6 +220,8 @@ Ack & Meaning \\
 \end{center}
 
 \warnbox{\ackS{} does not mean lost.}{The destination may well have received the message and its ACK was lost on the way back, or the message reached a relay and then the destination later. In the figure the DM to \emph{City Roof} was passed on by a relay (implicit ACK) and the one to \emph{Island Solar} got no answer at all: both show \ackS. Conversely, a relay that hears the message does not make it \ackY: only an ACK from the destination node itself does. That is why a DM to a node that is switched off never shows \ackY.}
+
+\lead{Hops of the acknowledgement.} The hops next to a \ackY{} tell how far the \emph{answer} travelled; the way back may differ from the way there (a traceroute, Section~\ref{sec:trace}, shows both). Messages sent before version v.16112026 and acknowledgements from nodes with old firmware show just \ackY. A relay that is heard passing the message on \emph{after} the real acknowledgement does not turn a \ackY{} back into an \ackS.
 
 If the gateway cannot hand a message to the radio (for example while the WiFi link is down), it tries again, up to three times; the reason is then shown in red under the row. The red bin removes a row from the list.
 
@@ -230,7 +232,7 @@ The Chat page shows the direct messages exchanged with one node as a conversatio
 
 \begin{itemize}[leftmargin=1.2em]
 \item Choose the node from the \textbf{node list} at the top right; every node the gateway knows is in it. You can also open a chat from any \ui{Chat} link or button in the Inbox, Outbox or Active Nodes.
-\item The node's messages are on the left with the time and the number of hops; your messages are on the right with their delivery mark (\ackY, \ackS, \dots, Section~\ref{sec:outbox}).
+\item The node's messages are on the left with the time and the number of hops; your messages are on the right with their delivery mark (\ackY, \ackS, \dots, Section~\ref{sec:outbox}) and, for \ackY, the hops of the acknowledgement.
 \item \ui{20 / 100 / 500} sets how many messages are shown.
 \item Write in the box at the bottom and press \ui{Send}. The counter under the box shows how many of the 240 bytes you have used (letters such as ä and ö take two bytes).
 \item Opening a chat marks the node's messages as read.

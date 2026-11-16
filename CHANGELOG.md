@@ -36,7 +36,12 @@ User-facing notes are in `doc/whats_new.md` (shown in the What's new window).
 - Services page: one card per service (switch, command, description, source, requests today, last
   request), shared settings card, shared log table (latest 100, node names, status badges, `?log=<name>`
   filter).
-- User guide 1.2 with Traceroute and the new Services page; demo data and screenshots for both.
+- **ACK hops** — outbox columns `ack_hops`, `ack_rssi`, `ack_snr` (added on start-up); `_handle_ack_packet`
+  stores `hopStart - hopLimit`, `rxRssi` and `rxSnr` of the routing packet when it is an end-to-end ACK
+  (`acked`). Outbox and Chat show `Y n hops` with the signal in the tooltip.
+- `update_outbox_ack_by_packet` never downgrades `acked` (a late implicit ACK from a relay used to turn
+  Y back into S).
+- User guide 1.3 with Traceroute, the new Services page and the ACK hops; demo data and screenshots.
 
 ## [2026-11-15]
 

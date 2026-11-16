@@ -1,7 +1,12 @@
 {# Shared UI helpers. Import with: {% import "_macros.html" as ui %} #}
 
-{% macro ack_badge(a) -%}
-  {%- if a == "acked" -%}<span class="ack ack-y" title="Y: ACK from recipient (end-to-end delivered)">Y</span>
+{% macro ack_badge(a, hops=none, rssi=none, snr=none) -%}
+  {%- if a == "acked" -%}
+    {%- set t = "Y: ACK from recipient (end-to-end delivered)" -%}
+    {%- if hops is not none %}{% set t = t ~ "; the ACK came back over " ~ hops ~ " hop" ~ ("" if hops == 1 else "s") %}{% endif -%}
+    {%- if rssi is not none or snr is not none %}{% set t = t ~ "; last hop RSSI " ~ (rssi if rssi is not none else "?") ~ " dBm, SNR " ~ (snr if snr is not none else "?") ~ " dB" %}{% endif -%}
+    <span class="ack-wrap" title="{{ t }}"><span class="ack ack-y">Y</span>
+    {%- if hops is not none %}<span class="ack-hops">{{ hops }} hop{{ '' if hops == 1 else 's' }}</span>{% endif %}</span>
   {%- elif a in ("no_ack", "nacked", "implicit_ack") -%}<span class="ack ack-s" title="S: sent, but no end-to-end ACK from the recipient">S</span>
   {%- elif a == "pending" -%}<span class="ack ack-p" title="Waiting for outcome">…</span>
   {%- else -%}<span class="ack ack-na" title="Not applicable">—</span>

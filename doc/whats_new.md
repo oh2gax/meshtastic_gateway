@@ -15,7 +15,9 @@ version shown in the navigation bar.
 - **Switched-off services stay quiet** — a command for a service that is off gets no reply (no airtime used), but the log shows it as *off*, so you can see that someone asked.
 - **`cmd help`** — send `cmd help` to the gateway and it replies with the commands of the services that are on, for example `Services: wx ICAO, taf ICAO, cmd solar, cmd wspr, cmd trace.`
 - **One log for all services** — the latest 100 requests in a table with the asking node's name, coloured results and a filter per service.
-- **User guide 1.2** — new Traceroute section, the new Services page, and `cmd trace` and `cmd help` in the quick reference.
+- **Hops of the ACK** — when a direct message gets its **Y**, the Outbox and Chat now show how many hops the acknowledgement travelled back (*Y 2 hops*); pointing at it shows the signal of its last hop. Messages sent before this version, and nodes with old firmware, show just *Y*.
+- **Y stays Y** — a relay heard passing the message on after the real acknowledgement no longer changes a **Y** back to **S**.
+- **User guide 1.3** — new Traceroute section, the new Services page, the hops of the ACK, and `cmd trace` and `cmd help` in the quick reference.
 
 ## v.15112026 — A fresh look, WSPR propagation on the mesh, and easy updates on the Pi
 

@@ -162,6 +162,12 @@ def build_demo(g) -> None:
                 (ts, g.iso_utc(ts), "sent", to, None, text, 1, 1000 + mins, ack, ts, g.iso_utc(ts)))
             conn.commit()
         ins_msg(ts, "out", None, to, text)
+        if ack == "acked":           # hops and signal of the returning ACK
+            n = node[to]
+            with g.DB_LOCK:
+                conn.execute("UPDATE outbox SET ack_hops=?, ack_rssi=?, ack_snr=? WHERE packet_id=?",
+                             (n[8], n[6], n[7], 1000 + mins))
+                conn.commit()
     for mins, frm, text, ch in BROADCASTS:
         ts = ago(mins)
         if frm is None:

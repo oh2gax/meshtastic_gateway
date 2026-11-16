@@ -37,7 +37,7 @@
           {% endif %}
         </td>
         <td>{{ r["text"] }}</td>
-        <td>{{ ui.ack_badge(r["ack_status"]) }}</td>
+        <td class="text-nowrap">{{ ui.ack_badge(r["ack_status"], r["ack_hops"], r["ack_rssi"], r["ack_snr"]) }}</td>
         <td>
           <div class="row-actions">
             <form method="post" action="{{ url_for('outbox_delete', out_id=r['id']) }}" onsubmit="return confirm('Delete this outbox entry?');" class="m-0">

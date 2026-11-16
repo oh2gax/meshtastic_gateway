@@ -232,3 +232,5 @@ pre.debugbox, .logbox {
 .svc-card.svc-off { opacity: .62; }
 .svc-card.svc-off:hover { opacity: .9; }
 .svc-card .form-switch .form-check-input { width: 2.4em; height: 1.25em; cursor: pointer; }
+.ack-wrap { display: inline-flex; align-items: center; gap: .3rem; }
+.ack-hops { font-size: .75rem; color: var(--mg-muted); font-family: var(--mg-mono); white-space: nowrap; }

@@ -882,6 +882,9 @@ def init_db(conn: sqlite3.Connection) -> None:
             ("ack_ts_iso",  "TEXT"),
             ("sent_ts",     "INTEGER"),
             ("sent_ts_iso", "TEXT"),
+            ("ack_hops",    "INTEGER"),   # hops the end-to-end ACK travelled back
+            ("ack_rssi",    "REAL"),      # signal of the ACK's last hop
+            ("ack_snr",     "REAL"),
         ]:
             if not _col_exists(cur, "outbox", col):
                 try:
@@ -1253,18 +1256,30 @@ def mark_outbox(conn: sqlite3.Connection, row_id: int, status: str, tries: int, 
         conn.commit()
 
 
-def update_outbox_ack_by_packet(conn: sqlite3.Connection, packet_id: int, ack_status: str) -> int:
-    """Called from the ACK response callback. Returns number of rows updated."""
+def update_outbox_ack_by_packet(conn: sqlite3.Connection, packet_id: int, ack_status: str,
+                                ack_hops: Optional[int] = None, ack_rssi: Optional[float] = None,
+                                ack_snr: Optional[float] = None) -> int:
+    """Called from the ACK response callback. Returns number of rows updated.
+    An end-to-end ACK ('acked') is never downgraded by a later routing packet,
+    and its hops / RSSI / SNR are stored with it."""
     if packet_id is None:
         return 0
     ts = utc_ts()
     with DB_LOCK:
         cur = conn.cursor()
-        cur.execute("""
-        UPDATE outbox
-        SET ack_status = ?, ack_ts = ?, ack_ts_iso = ?
-        WHERE packet_id = ?
-        """, (ack_status, ts, iso_utc(ts), int(packet_id)))
+        if ack_status == "acked":
+            cur.execute("""
+            UPDATE outbox
+            SET ack_status = 'acked', ack_ts = ?, ack_ts_iso = ?,
+                ack_hops = ?, ack_rssi = ?, ack_snr = ?
+            WHERE packet_id = ?
+            """, (ts, iso_utc(ts), ack_hops, ack_rssi, ack_snr, int(packet_id)))
+        else:
+            cur.execute("""
+            UPDATE outbox
+            SET ack_status = ?, ack_ts = ?, ack_ts_iso = ?
+            WHERE packet_id = ? AND COALESCE(ack_status, '') != 'acked'
+            """, (ack_status, ts, iso_utc(ts), int(packet_id)))
         conn.commit()
         return cur.rowcount or 0
 
@@ -1430,6 +1445,7 @@ def list_outbox(conn: sqlite3.Connection, limit: int = 50) -> List[sqlite3.Row]:
         SELECT o.id, o.created_ts, o.created_ts_iso, o.status, o.to_id, o.channel, o.channel_name,
                o.text, o.tries, o.last_error,
                o.packet_id, o.ack_status, o.ack_ts_iso, o.sent_ts_iso,
+               o.ack_hops, o.ack_rssi, o.ack_snr,
                nt.long_name AS to_long, nt.short_name AS to_short
         FROM outbox o
         LEFT JOIN nodes nt ON nt.node_id = o.to_id
@@ -1683,7 +1699,7 @@ def chat_messages(conn: sqlite3.Connection, node_id: str, limit: int) -> List[Di
                END AS hops,
                nf.long_name AS from_long, nf.short_name AS from_short,
                nt.long_name AS to_long, nt.short_name AS to_short,
-               NULL AS ack_status
+               NULL AS ack_status, NULL AS ack_hops, NULL AS ack_rssi, NULL AS ack_snr
         FROM messages m
         LEFT JOIN nodes nf ON nf.node_id = m.from_id
         LEFT JOIN nodes nt ON nt.node_id = m.to_id
@@ -1707,7 +1723,7 @@ def chat_messages(conn: sqlite3.Connection, node_id: str, limit: int) -> List[Di
                NULL AS hops,
                NULL AS from_long, NULL AS from_short,
                nt.long_name AS to_long, nt.short_name AS to_short,
-               o.ack_status
+               o.ack_status, o.ack_hops, o.ack_rssi, o.ack_snr
         FROM outbox o
         LEFT JOIN nodes nt ON nt.node_id = o.to_id
         WHERE o.to_id = ?
@@ -2610,9 +2626,19 @@ class Gateway:
             else:
                 new_status = "nacked"
 
-            n = update_outbox_ack_by_packet(self.db, rid, new_status)
+            ack_hops = ack_rssi = ack_snr = None
+            if new_status == "acked":
+                try:
+                    hs, hl = packet.get("hopStart"), packet.get("hopLimit")
+                    if hs is not None and hl is not None and int(hs) >= int(hl) >= 0:
+                        ack_hops = int(hs) - int(hl)
+                except Exception:
+                    ack_hops = None
+                ack_rssi = packet.get("rxRssi")
+                ack_snr = packet.get("rxSnr")
+            n = update_outbox_ack_by_packet(self.db, rid, new_status, ack_hops, ack_rssi, ack_snr)
             print(f"[GW] ACK via {source} for packet_id={rid}: {new_status} "
-                  f"(err={err_s}, ack_from={ack_from_id}, rows_updated={n})")
+                  f"(err={err_s}, ack_from={ack_from_id}, hops={ack_hops}, rows_updated={n})")
         except Exception as e:
             print(f"[GW] _handle_ack_packet error: {e}")
 

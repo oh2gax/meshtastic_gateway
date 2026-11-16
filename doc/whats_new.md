@@ -4,6 +4,19 @@ Short notes for users of the web page, newest first. Each version is one day of 
 (v.DDMMYYYY). The full technical history is in CHANGELOG.md. The newest heading gives the
 version shown in the navigation bar.
 
+## v.16112026 — Traceroute: see the path to any node, on the page and on the map
+
+- **Traceroute from Active Nodes** — the green route button on each row starts a traceroute with one click; the small ▾ next to it lets you choose the hop limit (1–7) for that run. The button remembers the hop limit you used last.
+- **Traceroute page** — shows the path in both directions as a chain of nodes, with the SNR on every hop in colour (green good, amber fair, red weak), a countdown while the answer is awaited, and a history of earlier traceroutes. *Repeat* runs the same one again. It can also be opened from Chat, from a node's popup on the Map and from the Status page.
+- **Route on the map** — *Show on map* draws the way there in orange and the way back as a dashed purple line, with the relays labelled; nodes without a known position are listed in the corner.
+- **`cmd trace`** — send `cmd trace` as a private message to the gateway and it runs a traceroute back to you and replies with the route in both directions, for example `Trace 1 hop: GAX0>HILL(6.5)>GAX4(2.5) | back: GAX4>HILL(3)>GAX0(5.5)`.
+- **Gentle on the mesh** — only one traceroute runs at a time and at least 30 seconds apart, as in the Meshtastic apps. Every traceroute is relayed by the nodes on the way, so it is a tool for when you need it.
+- **A switch for each service** — the Services page now has a card for each service (METAR, TAF, Solar, WSPR, Traceroute) with its own on/off switch, the command, where the data comes from and how many times it was asked today. *All services* still switches everything off at once, and the reply delay is shared.
+- **Switched-off services stay quiet** — a command for a service that is off gets no reply (no airtime used), but the log shows it as *off*, so you can see that someone asked.
+- **`cmd help`** — send `cmd help` to the gateway and it replies with the commands of the services that are on, for example `Services: wx ICAO, taf ICAO, cmd solar, cmd wspr, cmd trace.`
+- **One log for all services** — the latest 100 requests in a table with the asking node's name, coloured results and a filter per service.
+- **User guide 1.2** — new Traceroute section, the new Services page, and `cmd trace` and `cmd help` in the quick reference.
+
 ## v.15112026 — A fresh look, WSPR propagation on the mesh, and easy updates on the Pi
 
 - **A fresh, modern look** — all pages have a new top bar with icons, cards, coloured ACK badges (Y / S / … / —) and chat bubbles in Chat and Broadcast. Everything is where it was, and light / dark mode works as before. On a phone the menu folds into ☰.

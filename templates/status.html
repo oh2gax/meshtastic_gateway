@@ -5,7 +5,10 @@
     {% if connected %}<span class="badge rounded-pill text-bg-success"><i class="bi bi-wifi"></i> connected</span>
     {% else %}<span class="badge rounded-pill text-bg-danger"><i class="bi bi-wifi-off"></i> disconnected</span>{% endif %}
   </h5>
-  <div class="small text-body-secondary">Host <span class="mono">{{ host }}</span></div>
+  <div class="toolbar">
+    <span class="small text-body-secondary">Host <span class="mono">{{ host }}</span></span>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('traceroute_view') }}"><i class="bi bi-signpost-split"></i> Traceroute</a>
+  </div>
 </div>
 
 <div class="row g-3 mb-3">

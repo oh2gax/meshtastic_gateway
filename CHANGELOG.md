@@ -6,6 +6,38 @@ User-facing notes are in `doc/whats_new.md` (shown in the What's new window).
 
 ---
 
+## [2026-11-16]
+
+### Added
+- **Traceroute** — `traceroutes` table (created on start-up, old databases keep working); requests are
+  queued and sent from the gateway loop with `sendData(RouteDiscovery, portNum=TRACEROUTE_APP,
+  wantResponse=True, onResponse=…, hopLimit=1..7)` (the library's own `sendTraceRoute` blocks and prints,
+  so it is not used). Answers are matched by `requestId` via `onResponse`, with `on_any_packet` as a
+  backup; relay ACKs are ignored, routing errors (`NO_RESPONSE`, …) end the request as failed, no answer
+  within 30 s + 15 s × hop limit as timeout. `parse_route_discovery()` reads `decoded.traceroute` or the raw
+  payload; `0xFFFFFFFF` = unknown relay, SNR `-128` = unknown, SNR in quarter-dB.
+- One traceroute at a time, at least `TRACEROUTE_MIN_INTERVAL_SEC` (30 s) between sends.
+- `/traceroute` (start form, result chain, history), `POST /traceroute/start`, `/traceroute/<id>.json`;
+  Active Nodes one-click button + hop-limit dropdown (last used limit stored as setting
+  `traceroute_hop_limit`); links from Chat, Map popup and Status.
+- Map overlay `/map?trace=<id>`: towards (solid orange) and back (dashed purple), labelled relays, legend
+  with the chains and nodes without a position.
+- **`cmd trace`** service: traceroute back to the sender (hop limit = hops of the request + 1, at least 3);
+  the reply is queued to the service worker when the answer arrives or the request times out; "busy"
+  reply when one is already running. Ready-made replies go through `_queue_service_reply()`.
+- **Per-service switches** — registry `SERVICES` (name, label, icon, command, example, description, source,
+  help) renders the Services page; switch per service in setting `svc_<name>_enabled` (missing = on, so
+  updating changes nothing); a service answers when the master switch (`metar_enabled`, kept) and its own
+  switch are on. `POST /services/toggle` (`name` = service or `_master`); `POST /services` now saves only
+  the fields it gets (delay).
+- A command for a switched-off service is not answered and is logged with status `off`.
+- **`cmd help`** — always answers with the commands of the services that are on (`help_text()`), or
+  "Gateway services are off at the moment."; logged as service `help`.
+- Services page: one card per service (switch, command, description, source, requests today, last
+  request), shared settings card, shared log table (latest 100, node names, status badges, `?log=<name>`
+  filter).
+- User guide 1.2 with Traceroute and the new Services page; demo data and screenshots for both.
+
 ## [2026-11-15]
 
 ### Added

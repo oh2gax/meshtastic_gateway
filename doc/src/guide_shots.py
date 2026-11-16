@@ -100,6 +100,9 @@ SERVICE_LOG = [
     (50, "taf", "!a1b2c3d2", "EFHK", "ok", "151720Z 1518/1618 20008KT 9999 FEW020 TEMPO 1600/1608 4000 -SN BKN012"),
     (30, "solar", "!5e10a002", "SOLAR", "req", ""),
     (30, "solar", "!5e10a002", "SOLAR", "ok", "SFI 143 SN 160 X B9.7 A 4 K 1 AU 4 BZE -4.0 SW 377.2 Pf 14 Ef 2360"),
+    (12, "help", "!5e10a007", "HELP", "req", ""),
+    (12, "help", "!5e10a007", "HELP", "ok", "Services: wx ICAO, cmd solar, cmd wspr, cmd trace. Send as a private message."),
+    (8, "taf", "!5e10a007", "ESSA", "off", ""),
     (5, "wspr", "!a1b2c3d4", "WSPR", "req", ""),
     (5, "wspr", "!a1b2c3d4", "WSPR", "ok",
      "WSPR 20m 10:15Z: Very good & DX. 60 rptr/60m (3 >6000km), 7d typ 99 (90-139) BELOW. MUF 21.3 Loc KP20jg"),
@@ -177,6 +180,28 @@ def build_demo(g) -> None:
             conn.execute("UPDATE service_log SET ts=?, ts_iso=? WHERE id=(SELECT MAX(id) FROM service_log)",
                          (ago(mins), g.iso_utc(ago(mins))))
             conn.commit()
+    # Traceroutes: (minutes ago, target, hop limit, source, status, route, snr_towards, route_back, snr_back, error)
+    U = 0xFFFFFFFF
+    num = lambda nid: int(nid[1:], 16)
+    TRACES = [
+        (120, "!5e10a004", 3, "web", "done", [], [38], [], [34], None),
+        (90,  "!5e10a006", 3, "web", "timeout", None, None, None, None, "no answer"),
+        (45,  "!a1b2c3d4", 3, "cmd", "done", [num("!5e10a002")], [30, 10], [num("!5e10a002")], [12, 22], None),
+        (20,  "!5e10a001", 4, "web", "done", [num("!5e10a002")], [26, -17], [num("!5e10a005"), U], [-28, -128, -38], None),
+    ]
+    for mins, tgt, hl, src, st, rt, sto, rb, sb, err in TRACES:
+        tid = g.tr_insert(conn, tgt, hl, source=src, requested_by=tgt if src == "cmd" else None)
+        ts = ago(mins)
+        fields = {"status": st, "created_ts": ts, "created_ts_iso": g.iso_utc(ts), "sent_ts": ts,
+                  "done_ts": ts + 9, "done_ts_iso": g.iso_utc(ts + 9), "error": err}
+        if st == "done":
+            rd = g.parse_route_discovery({"decoded": {"traceroute": {
+                "route": rt, "snrTowards": sto, "routeBack": rb, "snrBack": sb}}})
+            fields.update(route_json=json.dumps(rd["route"]), snr_towards_json=json.dumps(rd["snr_towards"]),
+                          route_back_json=json.dumps(rd["route_back"]), snr_back_json=json.dumps(rd["snr_back"]))
+        g.tr_update(conn, tid, **fields)
+    g.set_setting(conn, g.TRACEROUTE_HOPS_KEY, "4")
+    g.set_setting(conn, "svc_taf_enabled", "0")          # one service switched off
     g.set_setting(conn, g.METAR_ENABLED_KEY, "1")
     g.set_setting(conn, g.METAR_DELAY_KEY, "3")
     g.set_setting(conn, g.BROADCAST_LAST_VIEWED_KEY, str(ago(30)))   # one new broadcast -> red Broadcast
@@ -287,7 +312,7 @@ async def shoot(chrome: str | None, assets: str | None) -> None:
             ("nodes", "/nodes?window=1d"), ("inbox", "/inbox"), ("outbox", "/outbox"),
             ("chat", "/chat/!5e10a001"), ("broadcast", "/broadcast"),
             ("send", "/send?to_id=!5e10a003"), ("services", "/services"),
-            ("status", "/status"), ("debug", "/debug"),
+            ("status", "/status"), ("debug", "/debug"), ("traceroute", "/traceroute?id=4"),
         ]
         for name, url in shots:
             await pg.goto(base + url)
@@ -320,6 +345,27 @@ async def shoot(chrome: str | None, assets: str | None) -> None:
         await pg.evaluate("""() => { const m = markers.get('!5e10a002'); if (m) m.openPopup(); }""")
         await pg.wait_for_timeout(600)
         await snap(pg, "map", full=False)
+
+        # route of traceroute 4 on the map
+        await pg.goto(base + "/map?window=1d&trace=4")
+        await pg.wait_for_timeout(1500)
+        await pg.evaluate("""(gj) => {
+            const el = document.getElementById('map'); el.style.background = '#dcebf7';
+            L.geoJSON(JSON.parse(gj), {style: {color: '#9aa5b1', weight: 1, fillColor: '#f6f3ec', fillOpacity: 1}})
+             .addTo(map).bringToBack();
+        }""", outline)
+        await pg.wait_for_timeout(800)
+        await snap(pg, "map_trace", full=False)
+
+        # Active Nodes: the traceroute button with its hop-limit menu open
+        await pg.set_viewport_size({"width": 1440, "height": 700})
+        await pg.goto(base + "/nodes?window=1d")
+        await pg.wait_for_timeout(800)
+        await pg.click('form:has(input[value="!5e10a001"]) .dropdown-toggle')
+        await pg.wait_for_timeout(500)
+        box = await pg.eval_on_selector('form:has(input[value="!5e10a001"])', "e => { const r = e.getBoundingClientRect(); return {x: r.x, y: r.y}; }")
+        await snap(pg, "nodes_trace_menu", clip={"x": 300, "y": max(0, box["y"] - 70), "width": 1140, "height": 380})
+        await pg.set_viewport_size({"width": 1440, "height": 900})
 
         # What's new / Guides / About window
         await pg.goto(base + "/nodes")

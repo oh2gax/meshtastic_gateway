@@ -21,6 +21,7 @@
       {% endfor %}
     </select>
     {% if node_id %}
+      <a class="btn btn-sm btn-outline-success" href="{{ url_for('traceroute_view', target=node_id) }}" title="Traceroute to this node"><i class="bi bi-signpost-split"></i> Traceroute</a>
       {{ ui.seg([
         ('20',  url_for('chat_with', node_id=node_id, limit=20),  limit == 20),
         ('100', url_for('chat_with', node_id=node_id, limit=100), limit == 100),

@@ -43,7 +43,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\itshape Meshtastic Gateway --- how to read and use the web page}
-\fancyhead[R]{\small\itshape User guide, version 1.0 --- November 2026}
+\fancyhead[R]{\small\itshape User guide, version 1.2 --- November 2026}
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0.3pt}
 \hypersetup{pdftitle={Meshtastic Gateway - User guide},pdfauthor={Otso Laakso, OH2GAX}}
@@ -69,7 +69,7 @@
 \begin{document}
 \thispagestyle{plain}
 \begin{center}
-{\small Meshtastic Gateway project \quad$\cdot$\quad User guide, version 1.0 \quad$\cdot$\quad 15 November 2026}\par\vspace{10pt}
+{\small Meshtastic Gateway project \quad$\cdot$\quad User guide, version 1.2 \quad$\cdot$\quad 16 November 2026}\par\vspace{10pt}
 {\LARGE\bfseries Meshtastic Gateway}\par\vspace{5pt}
 {\large\bfseries How to read and use the web page:\\ nodes, messages, the map, services and the gateway itself}\par\vspace{8pt}
 {\normalsize Otso Laakso (OH2GAX)}\par
@@ -79,9 +79,9 @@
 
 \infobox{In short.}{A Meshtastic radio (a Heltec V3 or V4) sits on the home WiFi. The gateway, a small Python program on a Raspberry Pi, keeps a connection to it open day and night, stores everything the radio hears in a database and shows it in a web page that any computer or phone on the home network can open. In one page you can:
 \begin{itemize}[leftmargin=1.2em]
-\item \textbf{see who is on the mesh} --- every node heard, how strong and how many hops away it is, and where it is on a map (Sections~\ref{sec:nodes} and~\ref{sec:map});
+\item \textbf{see who is on the mesh} --- every node heard, how strong and how many hops away it is, where it is on a map, and the exact path to it with a traceroute (Sections~\ref{sec:nodes}, \ref{sec:map} and~\ref{sec:trace});
 \item \textbf{read and send messages} --- private direct messages with delivery marks, a chat view per node, and the public channels (Sections~\ref{sec:inbox}--\ref{sec:send});
-\item \textbf{answer questions from the field automatically} --- a node can send \cmd{wx EFHK}, \cmd{taf EFHK}, \cmd{cmd solar} or \cmd{cmd wspr} to the gateway and gets the weather, the solar conditions or the WSPR propagation back over the mesh (Section~\ref{sec:services});
+\item \textbf{answer questions from the field automatically} --- a node can send \cmd{wx EFHK}, \cmd{taf EFHK}, \cmd{cmd solar}, \cmd{cmd wspr} or \cmd{cmd trace} to the gateway and gets the weather, the solar conditions, the WSPR propagation or the route to itself back over the mesh (Section~\ref{sec:services});
 \item \textbf{keep the gateway healthy} --- connection status, clean-up of nameless nodes and a raw packet view (Sections~\ref{sec:status}--\ref{sec:debug}).
 \end{itemize}
 Section~\ref{sec:mesh} explains Meshtastic as far as needed to read the page; Section~\ref{sec:pi} is for the person who runs the gateway, Section~\ref{sec:limits} lists what the page cannot tell and Section~\ref{sec:quick} is a one-page quick reference.}
@@ -183,7 +183,7 @@ Hops & Hops of the most recent packet: 0 = heard directly, --- = unknown. \\
 \bottomrule
 \end{tabularx}
 
-The two buttons at the end of a row open the \ui{Chat} with that node and the \ui{Send} form addressed to it.
+The buttons at the end of a row are, from the left: the green \textbf{traceroute} button with its small \ui{$\blacktriangledown$} (Section~\ref{sec:trace}), \ui{Chat} with that node and the \ui{Send} form addressed to it.
 
 \infobox{Reading the list.}{Nodes with 0~hops and a good SNR are your direct neighbours: these are the ones that carry your messages into the mesh. A node that is heard only with 3--4~hops is far away or behind hills; DMs to it take longer and are more often marked \ackS{} (Section~\ref{sec:outbox}).}
 
@@ -270,11 +270,49 @@ The map shows the last known position of every node that has sent one and was he
 \end{itemize}
 In light mode the map is OpenStreetMap; in dark mode it is the dark CARTO map. The dark map needs a free CARTO key in \cmd{api\_keys.py} (Section~\ref{sec:pi}), otherwise it shows a watermark.
 
+\section{Traceroute}\label{sec:trace}
+A traceroute asks one node for the path between it and the gateway, in both directions: which nodes relayed the request there, which relayed the answer back, and how well each of them heard the previous one. It answers questions like \emph{``Which of my neighbours carries my messages to the harbour?''} or \emph{``Why do my DMs to the island get only an \ackS?''}
+
+\fig{nodes_trace_menu.jpg}{1.0}{Starting a traceroute in Active Nodes. One click on the green button starts it; the \ui{$\blacktriangledown$} next to it opens the hop limits.}
+
+\lead{Starting one.}
+\begin{itemize}[leftmargin=1.2em]
+\item \textbf{From Active Nodes}: click the green route button on the node's row. The traceroute starts at once with the hop limit you used last (3 to begin with) and the Traceroute page opens to follow it. For another hop limit, click \ui{$\blacktriangledown$} and choose 1--7 instead; that choice becomes the new ``last used''.
+\item \textbf{From the Traceroute page}: choose the node and the hop limit and press \ui{Start traceroute}. The page also opens from the \ui{Traceroute} button in Chat, from a node's popup on the map and from the Status page.
+\end{itemize}
+The \textbf{hop limit} is how many relays the request may pass. It must be at least the number of hops the node is away (the \ui{Hops} column); a little more gives the mesh room to find a way.
+
+\fig{traceroute.jpg}{1.0}{The result of a traceroute to \emph{Harbour Relay}: there via \emph{Hill Top Router}, back via \emph{City Roof} and a relay that could not be identified. Below, the history.}
+
+\lead{Reading the result.} \ui{Towards} is the path from the gateway to the node, \ui{Back} the path of the answer; they are often different. Each node is a box with its short and long name. The value on each arrow is the \textbf{SNR at which that node heard the previous one}, in colour: \textcolor{ackY}{green} 0\dB\ or better, \textcolor{ackS}{amber} down to $-10$\dB, red below that. A weak arrow is the weak link of the route. A dashed box with \textbf{?} is a relay that took part but could not be identified, for example one that does not know the channel key. If the node runs older firmware, the way back is not reported.
+
+\lead{While waiting} the result card shows \ui{waiting to send} (it waits for the 30-second spacing, see below) and then \ui{waiting for answer} with a countdown; the page updates itself when the answer comes. The possible outcomes:
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+Result & Meaning \\
+\midrule
+route found & The node answered; the paths are shown. \\
+no answer & Nothing came back within the waiting time (30 seconds + 15 seconds per hop of the hop limit, so 75\,s with 3 hops). The node may be off or out of reach, or the hop limit too small. \\
+failed & The radio reported an error, for example \cmd{NO\_RESPONSE} or \cmd{MAX\_RETRANSMIT}. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\ui{Repeat} runs the same traceroute again, \ui{Show on map} draws it (below) and \ui{Chat} opens the conversation with the node. The \textbf{history} lists the last 50 traceroutes with their hop limit, the hops out and back, the result and who asked: the web page, or a node with \cmd{cmd trace}.
+
+\fig{map_trace.jpg}{1.0}{The same traceroute on the map: the way there in orange, the way back dashed purple. The relay marked \textbf{?} has no position and is skipped.}
+
+\lead{On the map} the way there is a solid orange line and the way back a dashed purple line between the nodes of the route, each labelled with its short name. The box in the corner repeats both paths with their SNR and lists the nodes that are not on the map because their position is not known; the line then jumps over them. The cross in the box removes the route from the map.
+
+\warnbox{Use it sparingly.}{Every node on the way relays a traceroute, so it takes airtime from everybody. The gateway runs only \textbf{one traceroute at a time} and at least \textbf{30 seconds apart}, like the Meshtastic apps; a request made sooner waits in line. A route is a snapshot: the mesh may choose another path a minute later.}
+
 \section{Services}\label{sec:services}
-\fig{services.jpg}{1.0}{The Services page: the on/off switch, the reply delay and the log of the latest requests.}
+\fig{services.jpg}{1.0}{The Services page: the shared settings at the top, a card with its own switch for each service (TAF is switched off here), and the shared log.}
 
 \subsection{Asking the gateway from the field}
-Any Meshtastic user can send one of these commands as a \textbf{direct message to the gateway's node} (in the Meshtastic app: open the gateway node and send a message). After the reply delay the gateway answers with a DM. Upper or lower case does not matter. Broadcasts are never answered.
+Any Meshtastic user can send one of these commands as a \textbf{direct message to the gateway's node} (in the Meshtastic app: open the gateway node and send a message). After the reply delay the gateway answers with a DM. Upper or lower case does not matter. Broadcasts are never answered. \cmd{cmd help} tells which commands are available.
 
 \begin{center}
 \begin{tabularx}{\textwidth}{@{}lX@{}}
@@ -285,6 +323,8 @@ Command & Reply \\
 \cmd{taf EFHK} & The latest TAF (forecast) of the airport, from NOAA, starting with its issue time; cut to 220 characters with \dots\ at the end. \\
 \cmd{cmd solar} & Solar and geomagnetic conditions from hamqsl.com: \cmd{SFI 143 SN 160 X B9.7 A 4 K 1 AU 4 BZE -4.0 SW 377.2 Pf 14 Ef 2360} --- solar flux, sunspots, X-ray class, A and K index, aurora, Bz, solar wind, proton and electron flux. \\
 \cmd{cmd wspr} & The present HF propagation measured by the OH2GAX WSPR beacon, see below. \\
+\cmd{cmd help} & The commands of the services that are on: \cmd{Services: wx ICAO, taf ICAO, cmd solar, cmd wspr, cmd trace. Send as a private message.} It always answers, also when the services are off. \\
+\cmd{cmd trace} & A traceroute from the gateway back to the node that asked (Section~\ref{sec:trace}), sent when the answer arrives, with short names and the SNR of each hop: \cmd{Trace 1 hop: GAX0>HILL(6.5)>GAX4(2.5) | back: GAX4>HILL(3)>GAX0(5.5)}. If one is already running: \cmd{Trace busy, try again in 30 s.} \\
 \bottomrule
 \end{tabularx}
 \end{center}
@@ -307,11 +347,13 @@ The level says how good the band is in absolute terms; the comparison says wheth
 
 When nobody has heard the beacon for an hour the reply is \cmd{No propagation}, with the time, locator and stations of the last spot. If that happens at an hour when the band is normally open, it says \cmd{No propagation or TX Fail} and how many stations are usually heard then --- the transmitter may simply be off. \cmd{TX back on} means the beacon has just come back and the comparison starts after an hour; \cmd{wspr.live unreachable} means the logger cannot get its data.
 
-\subsection{Settings and the log}
+\subsection{Switches, settings and the log}
 \begin{itemize}[leftmargin=1.2em]
-\item \ui{Service}: \ui{Enabled} or \ui{Disabled} switches all four commands at once.
-\item \ui{Reply delay}: seconds to wait before answering (0--60, default 3). A few seconds help a handheld that has just sent the command to be ready to receive.
-\item The \textbf{log} lists the latest 50 requests: time, service, the node that asked, the query and the result --- \cmd{req} (received), \cmd{ok} (answered, with the reply), \cmd{queued} (the radio could not be reached, the reply waits in the outbox) or \cmd{fail}.
+\item \textbf{A card per service} --- METAR, TAF, Solar, WSPR and Traceroute --- with its own \textbf{switch}, the command with an example, what it gives, where the data comes from and how often it was asked today (UTC). A switch takes effect at once; a card that is switched off is shown faded.
+\item \ui{All services} at the top switches every service off at once, for example during a busy event, and back on; the switches of the cards keep their positions. A service answers only when both its own switch and \ui{All services} are on.
+\item A command for a service that is off gets \textbf{no reply}, so it takes no airtime; the log shows it with the status \cmd{off}, so you can see that someone asked. \cmd{cmd help} lists only the services that are on.
+\item \ui{Reply delay}: seconds to wait before answering (0--60, default 3), shared by all services. A few seconds help a handheld that has just sent the command to be ready to receive.
+\item The \textbf{service log} lists the latest 100 requests of all services: time, service, the node that asked, the query, the result and the reply. The result is \cmd{req} (received), \cmd{ok} (answered), \cmd{queued} (the radio could not be reached, the reply waits in the outbox), \cmd{off} (service switched off, no reply) or \cmd{fail}. The buttons above the log show one service at a time.
 \end{itemize}
 
 \section{Status and maintenance}\label{sec:status}
@@ -390,6 +432,7 @@ cd \textasciitilde/meshtastic\_gateway \&\& ./update.sh & Update to the newest v
 \item \textbf{Positions only when shared.} A node is on the map only if its owner lets it send its position, and often only to a precision its owner chose.
 \item \textbf{No login.} Anybody who can open the page can read the messages and send in the gateway's name. Keep it on the home network.
 \item \textbf{UTC.} All times are UTC; only the map's track day starts at local midnight.
+\item \textbf{A traceroute is a snapshot.} The next one may take another path, and nodes that cannot be identified show as \textbf{?}.
 \item \textbf{Services need the internet} on the Pi, and \cmd{cmd wspr} needs the WSPR Logger to be up.
 \end{itemize}
 
@@ -401,13 +444,16 @@ I want to \dots & Do this \\
 \midrule
 see who is on the air & \ui{Active Nodes}, window \ui{2h}; \ui{1d} or \ui{1w} for longer \\
 see where they are & \ui{Map}; click a node in the list to zoom; tick \ui{track} for its route \\
+see the path to a node & the green route button in \ui{Active Nodes} (\ui{$\blacktriangledown$} for the hop limit), then \ui{Show on map} \\
 read new messages & the red envelope badge or \ui{Inbox}; a whole conversation: \ui{Chat} \\
 answer a message & \ui{Reply} in the Inbox, or write in the \ui{Chat} \\
 write to everybody & \ui{Broadcast}: choose the channel, write at the bottom \\
 know if a DM arrived & \ui{Outbox} or \ui{Chat}: \ackY{} delivered, \ackS{} sent without confirmation, \dots\ waiting \\
 get the weather over the mesh & DM \cmd{wx EFHK} or \cmd{taf EFHK} to the gateway node \\
 check HF conditions & DM \cmd{cmd solar} (space weather) or \cmd{cmd wspr} (20\,m WSPR propagation) \\
-turn the services off & \ui{Services} $\rightarrow$ \ui{Disabled} $\rightarrow$ \ui{Save} \\
+know what the gateway can answer & DM \cmd{cmd help} \\
+test my path from the field & DM \cmd{cmd trace} to the gateway node \\
+turn a service off & \ui{Services} $\rightarrow$ the switch on its card; all at once: \ui{All services} \\
 remove an old node & \ui{Status} $\rightarrow$ \ui{Remove specific node} \\
 look at raw packets & \ui{Debug}; \ui{Pause} to read, \ui{Copy} to save \\
 see what changed & the sparkle button $\rightarrow$ \ui{What's new} \\

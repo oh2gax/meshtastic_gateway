@@ -52,7 +52,10 @@
   </div>
 
   <div class="col-md-9">
-    <div id="map"></div>
+    <div class="position-relative">
+      <div id="map"></div>
+      <div id="trLegend" class="tr-legend card card-body py-2 px-3 small" style="display:none"></div>
+    </div>
   </div>
 </div>
 
@@ -117,6 +120,8 @@
         <div><b>Lat/Lon:</b> ${Number(n.lat).toFixed(5)}, ${Number(n.lon).toFixed(5)}</div>
         <div><b>Hops:</b> ${hopsStr}</div>
         ${n.distance_km != null ? `<div><b>Distance:</b> ${Number(n.distance_km).toFixed(1)} km</div>` : ""}
+        <div style="margin-top:6px"><a href="/chat/${encodeURIComponent(n.node_id)}">Chat</a> &middot;
+          <a href="/traceroute?target=${encodeURIComponent(n.node_id)}">Traceroute</a></div>
       </div>
     `;
   }
@@ -239,7 +244,52 @@
     refreshMarkersAndList();
   });
 
+  // ---- Traceroute overlay (/map?trace=<id>) --------------------------------
+  const TRACE_ID = {{ trace_id|default(0)|int }};
+  const traceLayer = L.layerGroup().addTo(map);
+  async function drawTrace() {
+    if (!TRACE_ID) return;
+    let t;
+    try {
+      const res = await fetch(`/traceroute/${TRACE_ID}.json`, {cache: "no-store"});
+      if (!res.ok) return;
+      t = await res.json();
+    } catch (e) { return; }
+    if (t.status !== "done") return;
+    const all = [];
+    function line(path, opts) {
+      const ll = path.filter(h => h.lat != null && h.lon != null).map(h => [h.lat, h.lon]);
+      if (ll.length >= 2) L.polyline(ll, opts).addTo(traceLayer);
+      all.push(...ll);
+    }
+    line(t.towards, {color: "#f97316", weight: 4, opacity: 0.9});
+    line(t.back, {color: "#8b5cf6", weight: 3, opacity: 0.9, dashArray: "7 7"});
+    const seen = new Set();
+    for (const h of [...t.towards, ...t.back]) {
+      if (!h.id || h.lat == null || h.lon == null || seen.has(h.id)) continue;
+      seen.add(h.id);
+      L.circleMarker([h.lat, h.lon], {radius: 5, color: "#f97316", weight: 2, fillColor: "#fff", fillOpacity: 1})
+        .bindTooltip(esc(h.short), {permanent: true, direction: "right", offset: [6, 0], className: "tr-label"})
+        .addTo(traceLayer);
+    }
+    if (all.length) map.fitBounds(L.latLngBounds(all), {padding: [50, 50], maxZoom: 14});
+    const chain = p => p.map((h, i) => (i && h.snr != null ? ` → ${esc(h.id ? h.short : "?")} (${h.snr > 0 ? "+" : ""}${h.snr} dB)` : (i ? ` → ${esc(h.id ? h.short : "?")}` : esc(h.short)))).join("");
+    const missing = [...new Set([...t.towards, ...t.back].filter(h => h.id && (h.lat == null || h.lon == null)).map(h => h.short))];
+    const el = document.getElementById("trLegend");
+    el.innerHTML = `
+      <div class="d-flex justify-content-between align-items-center gap-2 mb-1">
+        <b><i class="bi bi-signpost-split"></i> Traceroute to ${esc(t.target.name)}</b>
+        <a href="/map?window={{ window }}" class="btn-close" title="Clear the route" style="font-size:.6rem"></a>
+      </div>
+      <div><span style="color:#f97316">━━</span> towards: <span class="mono">${chain(t.towards)}</span></div>
+      ${t.back.length ? `<div><span style="color:#8b5cf6">╍╍</span> back: <span class="mono">${chain(t.back)}</span></div>` : ""}
+      ${missing.length ? `<div class="text-body-secondary mt-1">Not on the map (no position): ${missing.map(esc).join(", ")}</div>` : ""}
+      <div class="mt-1"><a href="/traceroute?id=${TRACE_ID}">Details</a></div>`;
+    el.style.display = "";
+  }
+
   setTimer();
   refreshMarkersAndList();
+  drawTrace();
 </script>
 {% endblock %}

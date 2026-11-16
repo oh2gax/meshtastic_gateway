@@ -44,6 +44,22 @@
         </td>
         <td>
           <div class="row-actions">
+            {% if r["node_id"] != my_id %}
+            <form method="post" action="{{ url_for('traceroute_start') }}" class="m-0 btn-group">
+              <input type="hidden" name="target" value="{{ r['node_id'] }}">
+              <button class="btn btn-sm btn-outline-success" type="submit" name="hops" value="{{ hop_default }}"
+                      title="Traceroute now (hop limit {{ hop_default }})"><i class="bi bi-signpost-split"></i></button>
+              <button type="button" class="btn btn-sm btn-outline-success dropdown-toggle dropdown-toggle-split"
+                      data-bs-toggle="dropdown" data-bs-popper-config='{"strategy":"fixed"}' aria-expanded="false"
+                      title="Traceroute with another hop limit"></button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li><h6 class="dropdown-header">Traceroute, hop limit</h6></li>
+                {% for h in range(1, 8) %}
+                  <li><button class="dropdown-item" type="submit" name="hops" value="{{ h }}">{{ h }}{% if h == hop_default %} <span class="text-body-secondary">(last used)</span>{% endif %}</button></li>
+                {% endfor %}
+              </ul>
+            </form>
+            {% endif %}
             <a class="btn btn-sm btn-outline-primary" href="{{ url_for('chat_with', node_id=r['node_id']) }}" title="Chat"><i class="bi bi-chat-dots"></i></a>
             <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('send_form', to_id=r['node_id']) }}" title="Send"><i class="bi bi-pencil-square"></i></a>
           </div>

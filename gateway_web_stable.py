@@ -317,6 +317,8 @@ SERVICE_COMMANDS = (
     (re.compile(r"^\s*taf\s+([A-Za-z]{4})\s*$", re.IGNORECASE), "taf"),   # "taf EFHK"
     (re.compile(r"^\s*cmd\s+solar\s*$", re.IGNORECASE), "solar"),         # "cmd solar"
     (re.compile(r"^\s*cmd\s+wspr\s*$", re.IGNORECASE), "wspr"),           # "cmd wspr"
+    (re.compile(r"^\s*cmd\s+trace\s*$", re.IGNORECASE), "trace"),         # "cmd trace"
+    (re.compile(r"^\s*cmd\s+help\s*$", re.IGNORECASE), "help"),           # "cmd help"
 )
 SERVICE_COMMAND_PATTERNS = tuple(p for p, _ in SERVICE_COMMANDS)
 
@@ -657,6 +659,34 @@ SERVICE_REPLY_BUILDERS = {
 }
 SERVICE_QUEUE_MAX = 50
 
+# The services shown on the Services page, each with its own on/off switch
+# (setting "svc_<name>_enabled", "1" when missing). A service answers only when
+# both the master switch (METAR_ENABLED_KEY, kept for older databases) and its
+# own switch are on. "cmd help" is not a service of its own: it always answers
+# with the list of the services that are on.
+SERVICES: List[Dict[str, str]] = [
+    {"name": "metar", "label": "METAR", "icon": "bi-cloud-sun", "command": "wx <ICAO>", "example": "wx EFHK",
+     "description": "The latest weather observation of any airport by its four-letter ICAO code.",
+     "source": "NOAA TGFTP", "help": "wx ICAO"},
+    {"name": "taf", "label": "TAF", "icon": "bi-cloud-drizzle", "command": "taf <ICAO>", "example": "taf EFHK",
+     "description": "The latest aerodrome forecast, cut to one packet.",
+     "source": "NOAA TGFTP", "help": "taf ICAO"},
+    {"name": "solar", "label": "Solar", "icon": "bi-sun", "command": "cmd solar", "example": "cmd solar",
+     "description": "Solar flux, sunspots, X-ray, A and K index, aurora, Bz, solar wind and particle flux.",
+     "source": "hamqsl.com", "help": "cmd solar"},
+    {"name": "wspr", "label": "WSPR", "icon": "bi-broadcast", "command": "cmd wspr", "example": "cmd wspr",
+     "description": "20 m propagation of the OH2GAX WSPR beacon: level, stations in 60 min, and ABOVE / SAME / BELOW the typical day.",
+     "source": "OH2GAX WSPR Logger", "help": "cmd wspr"},
+    {"name": "trace", "label": "Traceroute", "icon": "bi-signpost-split", "command": "cmd trace", "example": "cmd trace",
+     "description": "A traceroute from the gateway back to the asking node; the route both ways is sent when the answer arrives.",
+     "source": "the mesh", "help": "cmd trace"},
+]
+SERVICE_NAMES = [x["name"] for x in SERVICES]
+
+
+def _on(v: Optional[str]) -> bool:
+    return str(v or "").strip().lower() in ("1", "true", "yes", "on")
+
 
 # Debug buffer
 # -------------------------
@@ -877,6 +907,31 @@ def init_db(conn: sqlite3.Connection) -> None:
         if _col_exists(cur, "nodes", "last_pos_ts"):
             cur.execute("CREATE INDEX IF NOT EXISTS idx_nodes_last_pos ON nodes(last_pos_ts);")
 
+        # traceroute requests and their results
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS traceroutes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_ts INTEGER NOT NULL,
+            created_ts_iso TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            hop_limit INTEGER,
+            source TEXT,
+            requested_by TEXT,
+            status TEXT NOT NULL,
+            packet_id INTEGER,
+            sent_ts INTEGER,
+            done_ts INTEGER,
+            done_ts_iso TEXT,
+            route_json TEXT,
+            snr_towards_json TEXT,
+            route_back_json TEXT,
+            snr_back_json TEXT,
+            error TEXT
+        );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_traceroutes_created ON traceroutes(created_ts);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_traceroutes_packet ON traceroutes(packet_id);")
+
         conn.commit()
 
 
@@ -930,6 +985,28 @@ def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
                 (key, str(value)),
             )
         conn.commit()
+
+
+def services_master_on(conn: sqlite3.Connection) -> bool:
+    return _on(get_setting(conn, METAR_ENABLED_KEY, "1"))
+
+
+def service_switch_on(conn: sqlite3.Connection, name: str) -> bool:
+    """The service's own switch (ignores the master switch)."""
+    return _on(get_setting(conn, f"svc_{name}_enabled", "1"))
+
+
+def service_enabled(conn: sqlite3.Connection, name: str) -> bool:
+    """True when the service answers: master switch and its own switch both on."""
+    return services_master_on(conn) and service_switch_on(conn, name)
+
+
+def help_text(conn: sqlite3.Connection) -> str:
+    """Reply to "cmd help": the commands of the services that are on."""
+    on = [x["help"] for x in SERVICES if service_enabled(conn, x["name"])]
+    if not on:
+        return "Gateway services are off at the moment."
+    return "Services: " + ", ".join(on) + ". Send as a private message."
 
 
 def log_service_event(conn: sqlite3.Connection, service: str, from_id: Optional[str], to_id: Optional[str],
@@ -1761,6 +1838,209 @@ def build_channel_options(conn: sqlite3.Connection, device_id: Optional[str]) ->
         opts = [{"index": 0, "name": "", "role": "PRIMARY", "label": "0 · Primary"}]
     return opts
 # -------------------------
+# Traceroute
+# -------------------------
+# A traceroute asks the target node for the path in both directions. Every
+# traceroute is flooded through the mesh, so they are kept rare: one at a time
+# and at least TRACEROUTE_MIN_INTERVAL_SEC between two of them (the Meshtastic
+# apps use the same 30 s limit).
+TRACEROUTE_MIN_INTERVAL_SEC = 30
+TRACEROUTE_DEFAULT_HOPS = 3
+TRACEROUTE_HOPS_KEY = "traceroute_hop_limit"        # last hop limit chosen in the UI
+TRACEROUTE_UNKNOWN_NUM = 0xFFFFFFFF                 # relay that could not be identified
+TRACEROUTE_UNKNOWN_SNR = -128                       # "SNR not known" in RouteDiscovery
+
+
+def traceroute_timeout_sec(hop_limit: Optional[int]) -> int:
+    """How long to wait for the answer: 30 s + 15 s per allowed hop."""
+    try:
+        h = int(hop_limit or TRACEROUTE_DEFAULT_HOPS)
+    except Exception:
+        h = TRACEROUTE_DEFAULT_HOPS
+    return 30 + 15 * max(1, min(h, 7))
+
+
+def _mesh_protos():
+    """mesh_pb2 / portnums_pb2 from the installed meshtastic library (new and old layout)."""
+    try:
+        from meshtastic.protobuf import mesh_pb2, portnums_pb2  # type: ignore
+    except ImportError:
+        from meshtastic import mesh_pb2, portnums_pb2  # type: ignore
+    return mesh_pb2, portnums_pb2
+
+
+def parse_route_discovery(packet: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Return {route, snr_towards, route_back, snr_back} (node ids, dB or None)
+    from a TRACEROUTE_APP response packet, or None if it holds no route."""
+    dec = packet.get("decoded") or {}
+    d = dec.get("traceroute") if isinstance(dec.get("traceroute"), dict) else None
+    if d is None and dec.get("payload") is not None:
+        try:
+            import google.protobuf.json_format as jf  # type: ignore
+            mesh_pb2, _ = _mesh_protos()
+            rd = mesh_pb2.RouteDiscovery()
+            payload = dec["payload"]
+            rd.ParseFromString(payload if isinstance(payload, (bytes, bytearray)) else bytes(payload))
+            d = jf.MessageToDict(rd)
+        except Exception:
+            d = None
+    if d is None:
+        return None
+
+    def ids(lst):
+        out = []
+        for n in lst or []:
+            try:
+                n = int(n)
+            except Exception:
+                out.append(None)
+                continue
+            out.append(None if n == TRACEROUTE_UNKNOWN_NUM else int_to_node_id(n))
+        return out
+
+    def snrs(lst):
+        out = []
+        for v in lst or []:
+            try:
+                v = int(v)
+            except Exception:
+                out.append(None)
+                continue
+            out.append(None if v == TRACEROUTE_UNKNOWN_SNR else round(v / 4.0, 2))
+        return out
+
+    return {"route": ids(d.get("route")), "snr_towards": snrs(d.get("snrTowards")),
+            "route_back": ids(d.get("routeBack")), "snr_back": snrs(d.get("snrBack"))}
+
+
+def tr_insert(conn: sqlite3.Connection, target_id: str, hop_limit: int,
+              source: str = "web", requested_by: Optional[str] = None) -> int:
+    ts = utc_ts()
+    with DB_LOCK:
+        cur = conn.cursor()
+        cur.execute("""INSERT INTO traceroutes(created_ts, created_ts_iso, target_id, hop_limit,
+                       source, requested_by, status) VALUES(?,?,?,?,?,?, 'queued')""",
+                    (ts, iso_utc(ts), target_id, int(hop_limit), source, requested_by))
+        conn.commit()
+        return int(cur.lastrowid)
+
+
+def tr_get(conn: sqlite3.Connection, tr_id: int) -> Optional[sqlite3.Row]:
+    conn.row_factory = sqlite3.Row
+    with DB_LOCK:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM traceroutes WHERE id = ?", (int(tr_id),))
+        return cur.fetchone()
+
+
+def tr_list(conn: sqlite3.Connection, limit: int = 50) -> List[sqlite3.Row]:
+    conn.row_factory = sqlite3.Row
+    with DB_LOCK:
+        cur = conn.cursor()
+        cur.execute("""SELECT t.*, n.long_name AS target_long, n.short_name AS target_short
+                       FROM traceroutes t LEFT JOIN nodes n ON n.node_id = t.target_id
+                       ORDER BY t.created_ts DESC, t.id DESC LIMIT ?""", (int(limit),))
+        return cur.fetchall()
+
+
+def tr_update(conn: sqlite3.Connection, tr_id: int, **fields: Any) -> None:
+    if not fields:
+        return
+    cols = ", ".join(f"{k} = ?" for k in fields)
+    with DB_LOCK:
+        conn.execute(f"UPDATE traceroutes SET {cols} WHERE id = ?", (*fields.values(), int(tr_id)))
+        conn.commit()
+
+
+def tr_busy(conn: sqlite3.Connection) -> Tuple[bool, int]:
+    """(busy, seconds_to_wait): busy while one is queued / waiting for its answer,
+    otherwise the seconds left of the minimum interval since the last one was sent."""
+    with DB_LOCK:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM traceroutes WHERE status IN ('queued', 'sent')")
+        active = int(cur.fetchone()[0] or 0)
+        cur.execute("SELECT MAX(sent_ts) FROM traceroutes")
+        last = cur.fetchone()[0]
+    wait = 0
+    if last:
+        wait = max(0, int(last) + TRACEROUTE_MIN_INTERVAL_SEC - utc_ts())
+    return active > 0, wait
+
+
+def _node_brief(conn: sqlite3.Connection, node_id: Optional[str]) -> Dict[str, Any]:
+    if not node_id:
+        return {"id": None, "name": "unknown", "short": "?", "lat": None, "lon": None}
+    conn.row_factory = sqlite3.Row
+    with DB_LOCK:
+        cur = conn.cursor()
+        cur.execute("SELECT long_name, short_name, last_lat, last_lon FROM nodes WHERE node_id = ?", (node_id,))
+        r = cur.fetchone()
+    if not r:
+        return {"id": node_id, "name": node_id, "short": node_id[-4:], "lat": None, "lon": None}
+    return {"id": node_id, "name": node_display(r["long_name"], r["short_name"], node_id),
+            "short": (r["short_name"] or "").strip() or node_id[-4:],
+            "lat": r["last_lat"], "lon": r["last_lon"]}
+
+
+def tr_view(conn: sqlite3.Connection, row: sqlite3.Row, my_id: Optional[str]) -> Dict[str, Any]:
+    """A traceroute row with both paths resolved to node names and positions.
+    towards: gateway -> relays -> target; back: target -> relays -> gateway.
+    Each hop carries the SNR at which that node heard the previous one."""
+    def load(col):
+        try:
+            v = json.loads(row[col]) if row[col] else []
+            return v if isinstance(v, list) else []
+        except Exception:
+            return []
+    route, st, back, sb = load("route_json"), load("snr_towards_json"), load("route_back_json"), load("snr_back_json")
+    done = row["status"] == "done"
+    towards: List[Dict[str, Any]] = []
+    back_path: List[Dict[str, Any]] = []
+    if done:
+        towards.append(dict(_node_brief(conn, my_id), snr=None))
+        for i, nid in enumerate(route):
+            towards.append(dict(_node_brief(conn, nid), snr=st[i] if i < len(st) else None))
+        towards.append(dict(_node_brief(conn, row["target_id"]), snr=st[len(route)] if len(st) > len(route) else None))
+        if sb or back:   # firmware 2.3+ also reports the way back
+            back_path.append(dict(_node_brief(conn, row["target_id"]), snr=None))
+            for i, nid in enumerate(back):
+                back_path.append(dict(_node_brief(conn, nid), snr=sb[i] if i < len(sb) else None))
+            back_path.append(dict(_node_brief(conn, my_id), snr=sb[len(back)] if len(sb) > len(back) else None))
+    target = _node_brief(conn, row["target_id"])
+    timeout = traceroute_timeout_sec(row["hop_limit"])
+    left = None
+    if row["status"] == "sent" and row["sent_ts"]:
+        left = max(0, int(row["sent_ts"]) + timeout - utc_ts())
+    return {"id": row["id"], "created": row["created_ts_iso"], "status": row["status"],
+            "target": target, "hop_limit": row["hop_limit"], "source": row["source"],
+            "requested_by": row["requested_by"], "error": row["error"],
+            "done": row["done_ts_iso"], "towards": towards, "back": back_path,
+            "hops_out": len(route) if done else None,
+            "hops_back": (len(back) if (sb or back) else None) if done else None,
+            "seconds_left": left}
+
+
+def tr_text(view: Dict[str, Any]) -> str:
+    """One-packet summary for the cmd trace reply, using short names."""
+    def chain(path):
+        parts = []
+        for i, h in enumerate(path):
+            label = h["short"] if h["id"] else "?"
+            if i and h.get("snr") is not None:
+                label += f"({h['snr']:g})"
+            parts.append(label)
+        return ">".join(parts)
+    if view["status"] != "done":
+        why = view.get("error") or "no answer"
+        return f"Trace to you: {why}."
+    s = f"Trace {view['hops_out']} hop{'s' if view['hops_out'] != 1 else ''}: {chain(view['towards'])}"
+    if view["back"]:
+        s += f" | back: {chain(view['back'])}"
+    s = " ".join(s.split())
+    return s if len(s) <= 220 else s[:220].rstrip() + "…"
+
+
+# -------------------------
 # Meshtastic gateway thread
 # -------------------------
 class Gateway:
@@ -1956,6 +2236,14 @@ class Gateway:
             except Exception:
                 pass
 
+            # Traceroute answers (backup path; normally onResponse handles them)
+            dec_tr = packet.get("decoded")
+            if isinstance(dec_tr, dict) and dec_tr.get("portnum") == "TRACEROUTE_APP" and dec_tr.get("requestId"):
+                try:
+                    self._handle_traceroute_packet(packet)
+                except Exception as e:
+                    print(f"[GW] traceroute packet error: {e}")
+
             # Robust text logging: some setups don't emit meshtastic.receive.text
             decoded = packet.get("decoded")
             if isinstance(decoded, dict):
@@ -2040,9 +2328,6 @@ class Gateway:
         if not cmd:
             return
         service, query = cmd
-        enabled = get_setting(self.db, METAR_ENABLED_KEY, "1")
-        if enabled not in ("1", "true", "yes", "on"):
-            return
         to_id = packet.get("toId") or int_to_node_id(packet.get("to"))
         sender_id = packet.get("fromId") or int_to_node_id(packet.get("from"))
         if not to_id or not sender_id or is_broadcast_id(to_id):
@@ -2052,8 +2337,44 @@ class Gateway:
             ch_i = int(ch) if ch is not None else None
         except Exception:
             ch_i = None
+        if service == "help":
+            # Always answers (also when the services are switched off).
+            log_service_event(self.db, "help", sender_id, to_id, "HELP", "req", "")
+            self._queue_service_reply("help", "HELP", sender_id, to_id, ch_i, help_text(self.db))
+            return
+        if not service_enabled(self.db, service):
+            # Switched off: no reply (saves airtime), but note that someone asked.
+            log_service_event(self.db, service, sender_id, to_id, query, "off", "")
+            return
+        if service == "trace":
+            # Traceroute back to the sender; the reply is sent when the answer
+            # arrives (or times out). Use as many hops as the request needed.
+            log_service_event(self.db, "trace", sender_id, to_id, "TRACE", "req", "")
+            busy, wait = tr_busy(self.db)
+            if busy or wait > 0:
+                msg = f"Trace busy, try again in {max(wait, TRACEROUTE_MIN_INTERVAL_SEC)} s."
+                self._queue_service_reply("trace", "TRACE", sender_id, to_id, ch_i, msg)
+                return
+            hs, hl = packet.get("hopStart"), packet.get("hopLimit")
+            try:
+                hops = int(hs) - int(hl) + 1 if hs is not None and hl is not None else TRACEROUTE_DEFAULT_HOPS
+            except Exception:
+                hops = TRACEROUTE_DEFAULT_HOPS
+            hops = max(TRACEROUTE_DEFAULT_HOPS, min(hops, 7))
+            tr_insert(self.db, sender_id, hops, source="cmd", requested_by=sender_id)
+            return
         job = {"service": service, "query": query, "sender_id": sender_id,
                "to_id": to_id, "channel": ch_i}
+        try:
+            self.svc_queue.put_nowait(job)
+        except queue.Full:
+            log_service_event(self.db, service, sender_id, to_id, query, "fail", "service queue full")
+
+    def _queue_service_reply(self, service: str, query: str, sender_id: str, to_id: Optional[str],
+                             channel: Optional[int], reply: str) -> None:
+        """Queue a ready-made service reply (used by cmd trace)."""
+        job = {"service": service, "query": query, "sender_id": sender_id, "to_id": to_id,
+               "channel": channel, "reply": reply, "logged": True}
         try:
             self.svc_queue.put_nowait(job)
         except queue.Full:
@@ -2077,9 +2398,13 @@ class Gateway:
     def _run_service_job(self, job: Dict[str, Any]) -> None:
         service = job["service"]; query = job["query"]
         sender_id = job["sender_id"]; to_id = job["to_id"]
-        log_service_event(self.db, service, sender_id, to_id, query, "req", "")
-        builder = SERVICE_REPLY_BUILDERS.get(service)
-        reply = builder(query) if builder else f"Unknown service {service}"
+        if not job.get("logged"):
+            log_service_event(self.db, service, sender_id, to_id, query, "req", "")
+        if job.get("reply") is not None:
+            reply = job["reply"]
+        else:
+            builder = SERVICE_REPLY_BUILDERS.get(service)
+            reply = builder(query) if builder else f"Unknown service {service}"
         try:
             delay = int(get_setting(self.db, METAR_DELAY_KEY, "3") or 3)
         except Exception:
@@ -2102,6 +2427,106 @@ class Gateway:
             except Exception as e_q:
                 debug_add({'ts': iso_now(), 'fromId': sender_id, 'type': 'svc', 'note': f'{service} queue failed: {e_q}'})
                 log_service_event(self.db, service, sender_id, to_id, query, "fail", f"queue: {e_q}")
+
+    # ---- traceroute -----------------------------------------------------
+    def _process_traceroutes(self) -> None:
+        """Called from the gateway loop: time out old requests, send the next one."""
+        now = utc_ts()
+        conn = self.db
+        conn.row_factory = sqlite3.Row
+        with DB_LOCK:
+            cur = conn.cursor()
+            cur.execute("SELECT id, sent_ts, hop_limit FROM traceroutes WHERE status = 'sent'")
+            waiting = cur.fetchall()
+        for r in waiting:
+            if r["sent_ts"] and now > int(r["sent_ts"]) + traceroute_timeout_sec(r["hop_limit"]):
+                self._finish_traceroute(r["id"], status="timeout", error="no answer")
+        if self.iface is None:
+            return
+        busy, wait = tr_busy(conn)
+        with DB_LOCK:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM traceroutes WHERE status = 'sent'")
+            in_flight = int(cur.fetchone()[0] or 0)
+            cur.execute("SELECT * FROM traceroutes WHERE status = 'queued' ORDER BY id ASC LIMIT 1")
+            nxt = cur.fetchone()
+        if not nxt or in_flight or wait > 0:
+            return
+        try:
+            mesh_pb2, portnums_pb2 = _mesh_protos()
+            pkt = self.iface.sendData(
+                mesh_pb2.RouteDiscovery(),
+                destinationId=nxt["target_id"],
+                portNum=portnums_pb2.PortNum.TRACEROUTE_APP,
+                wantResponse=True,
+                onResponse=self._on_traceroute_response,
+                channelIndex=0,
+                hopLimit=int(nxt["hop_limit"] or TRACEROUTE_DEFAULT_HOPS),
+            )
+            pid = None
+            try:
+                pid = int(pkt.get("id")) if isinstance(pkt, dict) else int(getattr(pkt, "id", 0)) or None
+            except Exception:
+                pid = None
+            tr_update(conn, nxt["id"], status="sent", packet_id=pid, sent_ts=utc_ts())
+            print(f"[GW] TRACEROUTE id={nxt['id']} -> {nxt['target_id']} hops={nxt['hop_limit']} pkt={pid}")
+        except Exception as e:
+            print(f"[GW] traceroute send failed: {e}")
+            self._finish_traceroute(nxt["id"], status="failed", error=f"send failed: {e}"[:200])
+
+    def _on_traceroute_response(self, packet) -> None:
+        try:
+            self._handle_traceroute_packet(packet)
+        except Exception as e:
+            print(f"[GW] traceroute response error: {e}")
+
+    def _handle_traceroute_packet(self, packet: Dict[str, Any]) -> None:
+        """Match an answer (TRACEROUTE_APP, or ROUTING_APP with an error) to the
+        waiting request by packet id and store the route."""
+        if not isinstance(packet, dict):
+            return
+        dec = packet.get("decoded") or {}
+        rid = dec.get("requestId") or packet.get("requestId")
+        if rid is None:
+            return
+        try:
+            rid = int(rid)
+        except Exception:
+            return
+        conn = self.db
+        conn.row_factory = sqlite3.Row
+        with DB_LOCK:
+            cur = conn.cursor()
+            cur.execute("SELECT id FROM traceroutes WHERE packet_id = ? AND status = 'sent' LIMIT 1", (rid,))
+            r = cur.fetchone()
+        if not r:
+            return
+        if dec.get("portnum") == "ROUTING_APP":
+            err = (dec.get("routing") or {}).get("errorReason", "NONE")
+            err = err.name if hasattr(err, "name") else str(err)
+            if err.upper() in ("NONE", "0"):
+                return            # plain ACK from a relay; keep waiting for the answer
+            self._finish_traceroute(r["id"], status="failed", error=err.upper())
+            return
+        rd = parse_route_discovery(packet)
+        if rd is None:
+            return
+        self._finish_traceroute(r["id"], status="done",
+                                route_json=json.dumps(rd["route"]),
+                                snr_towards_json=json.dumps(rd["snr_towards"]),
+                                route_back_json=json.dumps(rd["route_back"]),
+                                snr_back_json=json.dumps(rd["snr_back"]))
+
+    def _finish_traceroute(self, tr_id: int, status: str, **fields: Any) -> None:
+        ts = utc_ts()
+        tr_update(self.db, tr_id, status=status, done_ts=ts, done_ts_iso=iso_utc(ts), **fields)
+        row = tr_get(self.db, tr_id)
+        if row is None:
+            return
+        print(f"[GW] TRACEROUTE id={tr_id} {status} {fields.get('error') or ''}")
+        if row["source"] == "cmd" and row["requested_by"]:
+            text = tr_text(tr_view(self.db, row, self.my_id))
+            self._queue_service_reply("trace", "TRACE", row["requested_by"], self.my_id, None, text)
 
     def send_text(self, text: str, to_id: Optional[str] = None, channel: Optional[int] = None,
                   want_ack: bool = False, on_response=None):
@@ -2219,6 +2644,11 @@ class Gateway:
                     sweep_stale_pending_acks(self.db)
                 except Exception:
                     pass
+                # traceroutes: send the next queued one, time out unanswered ones
+                try:
+                    self._process_traceroutes()
+                except Exception as e:
+                    print(f"[GW] traceroute loop error: {e}")
 
                 row = fetch_one_outbox(self.db)
                 if row:
@@ -2625,7 +3055,12 @@ def nodes():
     window = request.args.get("window", DEFAULT_ACTIVE_WINDOW)
     win_sec = parse_window_to_seconds(window)
     rows = list_active_nodes(DB_CONN, win_sec)
-    return render_template("nodes.html", host=HOST, extra_head="", rows=rows, window=window)
+    try:
+        hop_default = int(get_setting(DB_CONN, TRACEROUTE_HOPS_KEY, str(TRACEROUTE_DEFAULT_HOPS)))
+    except Exception:
+        hop_default = TRACEROUTE_DEFAULT_HOPS
+    return render_template("nodes.html", host=HOST, extra_head="", rows=rows, window=window,
+                           hop_default=hop_default, my_id=(gateway.my_id or ""))
 
 @app.get("/chat", endpoint="chat_index")
 def chat_index():
@@ -2688,9 +3123,79 @@ def map_view():
         center_lon = float(rows[0]["last_lon"])
     else:
         center_lat, center_lon = 60.1699, 24.9384
+    try:
+        trace_id = int(request.args.get("trace", "0") or 0)
+    except Exception:
+        trace_id = 0
     return render_template("map.html", host=HOST, rows=rows, window=window, track_n=track_n,
                            center_lat=center_lat, center_lon=center_lon,
-                           carto_api_key=CARTO_API_KEY)
+                           carto_api_key=CARTO_API_KEY, trace_id=trace_id)
+
+@app.get("/traceroute")
+def traceroute_view():
+    try:
+        sel_id = int(request.args.get("id", "0") or 0)
+    except Exception:
+        sel_id = 0
+    target = (request.args.get("target", "") or "").strip()
+    rows = tr_list(DB_CONN, limit=50)
+    sel = None
+    if sel_id:
+        r = tr_get(DB_CONN, sel_id)
+        sel = tr_view(DB_CONN, r, gateway.my_id) if r else None
+    elif rows:
+        sel = tr_view(DB_CONN, rows[0], gateway.my_id)
+    history = []
+    for r in rows:
+        v = tr_view(DB_CONN, r, gateway.my_id)
+        history.append(v)
+    busy, wait = tr_busy(DB_CONN)
+    try:
+        hop_default = int(get_setting(DB_CONN, TRACEROUTE_HOPS_KEY, str(TRACEROUTE_DEFAULT_HOPS)))
+    except Exception:
+        hop_default = TRACEROUTE_DEFAULT_HOPS
+    try:
+        all_nodes = list_all_nodes_for_picker(DB_CONN)
+    except Exception:
+        all_nodes = []
+    return render_template("traceroute.html", host=HOST, sel=sel, history=history,
+                           target=target or (sel["target"]["id"] if sel else ""),
+                           all_nodes=all_nodes, my_id=(gateway.my_id or ""),
+                           hop_default=hop_default, busy=busy, wait=wait,
+                           connected=(gateway.iface is not None),
+                           min_interval=TRACEROUTE_MIN_INTERVAL_SEC,
+                           msg=(request.args.get("msg", "") or ""))
+
+
+@app.post("/traceroute/start")
+def traceroute_start():
+    target = (request.form.get("target", "") or "").strip()
+    try:
+        hops = int(request.form.get("hops", str(TRACEROUTE_DEFAULT_HOPS)))
+    except Exception:
+        hops = TRACEROUTE_DEFAULT_HOPS
+    hops = max(1, min(hops, 7))
+    if not re.fullmatch(r"![0-9a-fA-F]{8}", target):
+        return redirect(url_for("traceroute_view", msg="Choose a node first."))
+    if gateway.my_id and target == gateway.my_id:
+        return redirect(url_for("traceroute_view", msg="That is the gateway's own node."))
+    busy, wait = tr_busy(DB_CONN)
+    if busy:
+        return redirect(url_for("traceroute_view", target=target,
+                                msg="A traceroute is already running; wait for its result."))
+    set_setting(DB_CONN, TRACEROUTE_HOPS_KEY, str(hops))
+    tr_id = tr_insert(DB_CONN, target, hops, source="web")
+    # If the 30 s spacing is not over yet, the gateway sends it as soon as it is.
+    return redirect(url_for("traceroute_view", id=tr_id))
+
+
+@app.get("/traceroute/<int:tr_id>.json")
+def traceroute_json(tr_id: int):
+    r = tr_get(DB_CONN, tr_id)
+    if not r:
+        abort(404)
+    return jsonify(tr_view(DB_CONN, r, gateway.my_id))
+
 
 @app.get("/map/data")
 def map_data():
@@ -2785,42 +3290,79 @@ def map_tracks():
 
 @app.get("/services")
 def services_view():
-    metar_enabled = get_setting(DB_CONN, METAR_ENABLED_KEY, "1")
-    metar_delay = get_setting(DB_CONN, METAR_DELAY_KEY, "3")
-    metar_log = []
+    master = services_master_on(DB_CONN)
+    delay = get_setting(DB_CONN, METAR_DELAY_KEY, "3")
+    log_filter = (request.args.get("log", "") or "").strip().lower()
+    if log_filter not in SERVICE_NAMES + ["help"]:
+        log_filter = ""
+    now = datetime.now(timezone.utc)
+    day_start = int(datetime(now.year, now.month, now.day, tzinfo=timezone.utc).timestamp())
+    stats: Dict[str, Dict[str, Any]] = {}
+    log_rows: List[sqlite3.Row] = []
     try:
         DB_CONN.row_factory = sqlite3.Row
         with DB_LOCK:
             cur = DB_CONN.cursor()
             cur.execute("""
-                SELECT ts_iso, service, from_id, query, status, note
-                FROM service_log
-                WHERE service IN ('metar', 'taf', 'solar', 'wspr')
-                ORDER BY ts DESC LIMIT 50
-            """)
-            metar_log = cur.fetchall()
-    except Exception:
-        metar_log = []
+                SELECT service,
+                       SUM(CASE WHEN status IN ('req', 'off') AND ts >= ? THEN 1 ELSE 0 END) AS today,
+                       MAX(CASE WHEN status IN ('req', 'off') THEN ts END) AS last_ts
+                FROM service_log GROUP BY service
+            """, (day_start,))
+            for r in cur.fetchall():
+                stats[r["service"]] = {"today": int(r["today"] or 0),
+                                       "last": iso_utc(int(r["last_ts"])) if r["last_ts"] else ""}
+            sql = """
+                SELECT l.ts_iso, l.service, l.from_id, l.query, l.status, l.note,
+                       n.long_name AS from_long, n.short_name AS from_short
+                FROM service_log l LEFT JOIN nodes n ON n.node_id = l.from_id
+            """
+            if log_filter:
+                cur.execute(sql + " WHERE l.service = ? ORDER BY l.ts DESC, l.id DESC LIMIT 100", (log_filter,))
+            else:
+                cur.execute(sql + " ORDER BY l.ts DESC, l.id DESC LIMIT 100")
+            log_rows = cur.fetchall()
+    except sqlite3.OperationalError:
+        pass        # no service_log table yet (nothing has been asked)
+    services = []
+    for x in SERVICES:
+        services.append(dict(x, switch=service_switch_on(DB_CONN, x["name"]),
+                             answers=master and service_switch_on(DB_CONN, x["name"]),
+                             today=stats.get(x["name"], {}).get("today", 0),
+                             last=stats.get(x["name"], {}).get("last", "")))
     return render_template(
         "services.html", host=HOST, extra_head="",
-        metar_enabled=(metar_enabled in ("1", "true", "yes", "on")),
-        metar_delay=metar_delay,
-        metar_log=metar_log,
+        master=master, delay=delay, services=services,
+        log_rows=log_rows, log_filter=log_filter,
+        help_preview=help_text(DB_CONN),
+        labels={**{x["name"]: x["label"] for x in SERVICES}, "help": "Help"},
     )
 
 
 @app.post("/services", endpoint="services_post")
 def services_save():
-    enabled = request.form.get("metar_enabled", "1")
-    enabled = "1" if str(enabled).strip() in ("1", "true", "yes", "on") else "0"
-    try:
-        delay = int(request.form.get("metar_delay", "3") or 3)
-    except Exception:
-        delay = 3
-    delay = max(0, min(delay, 60))
-    set_setting(DB_CONN, METAR_ENABLED_KEY, enabled)
-    set_setting(DB_CONN, METAR_DELAY_KEY, str(delay))
-    return redirect(url_for("services_view"))
+    """Save the reply delay (and, from older pages, the master switch)."""
+    if "metar_enabled" in request.form:
+        set_setting(DB_CONN, METAR_ENABLED_KEY, "1" if _on(request.form.get("metar_enabled")) else "0")
+    if "metar_delay" in request.form:
+        try:
+            delay = int(request.form.get("metar_delay", "3") or 3)
+        except Exception:
+            delay = 3
+        set_setting(DB_CONN, METAR_DELAY_KEY, str(max(0, min(delay, 60))))
+    return redirect(url_for("services_view", log=request.args.get("log") or None))
+
+
+@app.post("/services/toggle", endpoint="services_toggle")
+def services_toggle():
+    """One switch: name = "_master" or a service name; on = "1" / "0"."""
+    name = (request.form.get("name", "") or "").strip()
+    on = "1" if _on(request.form.get("on")) else "0"
+    if name == "_master":
+        set_setting(DB_CONN, METAR_ENABLED_KEY, on)
+    elif name in SERVICE_NAMES:
+        set_setting(DB_CONN, f"svc_{name}_enabled", on)
+    return redirect(url_for("services_view", log=request.args.get("log") or None))
 
 
 @app.get("/debug")

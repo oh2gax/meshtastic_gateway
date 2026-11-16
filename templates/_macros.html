@@ -26,3 +26,29 @@
     {%- endfor %}
   </select>
 {%- endmacro %}
+
+{# Traceroute status badge #}
+{% macro tr_badge(v) -%}
+  {%- if v.status == "done" -%}<span class="badge rounded-pill text-bg-success">route found</span>
+  {%- elif v.status == "sent" -%}<span class="badge rounded-pill text-bg-primary"><span class="spinner-border spinner-border-sm" style="width:.7rem;height:.7rem"></span> waiting for answer</span>
+  {%- elif v.status == "queued" -%}<span class="badge rounded-pill text-bg-secondary">waiting to send</span>
+  {%- elif v.status == "timeout" -%}<span class="badge rounded-pill text-bg-warning">no answer</span>
+  {%- else -%}<span class="badge rounded-pill text-bg-danger" title="{{ v.error or '' }}">failed{% if v.error %}: {{ v.error }}{% endif %}</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{# One path: node pills joined by arrows that carry the SNR at the receiving node #}
+{% macro tr_chain(path) -%}
+  <div class="tr-chain">
+    {%- for h in path %}
+      {%- if not loop.first %}
+        <span class="tr-arrow {% if h.snr is none %}snr-na{% elif h.snr >= 0 %}snr-good{% elif h.snr >= -10 %}snr-mid{% else %}snr-low{% endif %}">
+          <i class="bi bi-arrow-right"></i>{% if h.snr is not none %}<small>{{ '%+.1f'|format(h.snr) }} dB</small>{% endif %}
+        </span>
+      {%- endif %}
+      <span class="tr-node {% if not h.id %}unknown{% endif %}" title="{{ h.id or 'relay that could not be identified' }}">
+        <b>{{ h.short if h.id else '?' }}</b><small>{{ h.name if h.id else 'unknown' }}</small>
+      </span>
+    {%- endfor %}
+  </div>
+{%- endmacro %}

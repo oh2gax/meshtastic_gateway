@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block body %}
+<div class="page-head">
+  <h5><i class="bi bi-signpost-split"></i> Traceroute</h5>
+  <div class="small text-body-secondary">One at a time, at least {{ min_interval }} s apart</div>
+</div>
+
+{% if msg %}<div class="alert alert-warning py-2">{{ msg }}</div>{% endif %}
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-4">
+    <form method="post" action="{{ url_for('traceroute_start') }}" class="card card-body h-100">
+      <div class="card-title-sm">New traceroute</div>
+      <label class="form-label small mb-1">Node</label>
+      <select class="form-select mb-2" name="target" required>
+        <option value="">-- select a node --</option>
+        {% for n in all_nodes %}
+          {% if n['node_id'] != my_id %}
+            <option value="{{ n['node_id'] }}" {% if n['node_id'] == target %}selected{% endif %}>
+              {{ node_display(n['long_name'], n['short_name'], n['node_id']) }} &mdash; {{ n['node_id'] }}
+            </option>
+          {% endif %}
+        {% endfor %}
+      </select>
+      <label class="form-label small mb-1">Hop limit</label>
+      <select class="form-select mb-3" name="hops" style="max-width: 140px;">
+        {% for h in range(1, 8) %}<option value="{{ h }}" {% if h == hop_default %}selected{% endif %}>{{ h }}</option>{% endfor %}
+      </select>
+      <button class="btn btn-primary" type="submit" {% if busy or not connected %}disabled{% endif %}>
+        <i class="bi bi-signpost-split"></i> Start traceroute
+      </button>
+      <div class="small text-body-secondary mt-2">
+        {% if not connected %}The gateway is not connected to the radio.
+        {% elif busy %}A traceroute is running; wait for its result.
+        {% elif wait > 0 %}The next one is sent in {{ wait }} s (it waits in line until then).
+        {% else %}Every node on the way relays a traceroute, so use it sparingly.{% endif %}
+      </div>
+    </form>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card h-100"><div class="card-body">
+      <div class="card-title-sm">Result</div>
+      {% if sel %}
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+          <span class="fw-semibold">{{ sel.target.name }}</span> <span class="node-id">{{ sel.target.id }}</span>
+          {{ ui.tr_badge(sel) }}
+          {% if sel.status == 'sent' and sel.seconds_left is not none %}<span class="small text-body-secondary" id="trLeft" data-left="{{ sel.seconds_left }}">{{ sel.seconds_left }} s left</span>{% endif %}
+        </div>
+        <div class="meta mb-3">
+          {{ sel.created }} &middot; hop limit {{ sel.hop_limit }}
+          {% if sel.source == 'cmd' %} &middot; asked with <code>cmd trace</code> by {{ sel.requested_by }}{% endif %}
+        </div>
+
+        {% if sel.status == 'done' %}
+          <div class="small fw-semibold mb-1">Towards &middot; {{ sel.hops_out }} hop{{ '' if sel.hops_out == 1 else 's' }}</div>
+          {{ ui.tr_chain(sel.towards) }}
+          <div class="small fw-semibold mt-3 mb-1">Back{% if sel.hops_back is not none %} &middot; {{ sel.hops_back }} hop{{ '' if sel.hops_back == 1 else 's' }}{% endif %}</div>
+          {% if sel.back %}{{ ui.tr_chain(sel.back) }}
+          {% else %}<div class="small text-body-secondary">The node did not report the way back (older firmware).</div>{% endif %}
+          <div class="small text-body-secondary mt-3">The dB value on each arrow is the SNR at which that node heard the previous one. <b>?</b> is a relay that could not be identified.</div>
+        {% elif sel.status in ('queued', 'sent') %}
+          <div class="text-body-secondary">The result appears here by itself.</div>
+        {% elif sel.status == 'timeout' %}
+          <div class="text-body-secondary">No answer arrived. The node may be off or out of reach, or the hop limit too small for the distance.</div>
+        {% else %}
+          <div class="text-body-secondary">The traceroute failed: {{ sel.error or 'unknown reason' }}.</div>
+        {% endif %}
+
+        <div class="d-flex gap-2 mt-3">
+          {% if sel.status == 'done' %}
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('map_view', trace=sel.id, window='1m') }}"><i class="bi bi-geo-alt"></i> Show on map</a>
+          {% endif %}
+          {% if sel.status not in ('queued', 'sent') %}
+            <form method="post" action="{{ url_for('traceroute_start') }}" class="m-0">
+              <input type="hidden" name="target" value="{{ sel.target.id }}">
+              <input type="hidden" name="hops" value="{{ sel.hop_limit }}">
+              <button class="btn btn-sm btn-outline-secondary" type="submit" {% if busy or not connected %}disabled{% endif %}><i class="bi bi-arrow-repeat"></i> Repeat</button>
+            </form>
+          {% endif %}
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('chat_with', node_id=sel.target.id) }}"><i class="bi bi-chat-dots"></i> Chat</a>
+        </div>
+      {% else %}
+        <div class="empty-state"><i class="bi bi-signpost-split"></i>No traceroutes yet. Choose a node and start one, or use the route button in Active Nodes.</div>
+      {% endif %}
+    </div></div>
+  </div>
+</div>
+
+<div class="card table-card">
+  <div class="card-body pb-0"><div class="card-title-sm mb-2">History</div></div>
+  <div class="table-responsive">
+  <table class="table table-sm table-hover align-middle">
+    <thead><tr><th>Time</th><th>Node</th><th>Hop limit</th><th>Out / back</th><th>Result</th><th>Asked by</th><th></th></tr></thead>
+    <tbody>
+    {% for v in history %}
+      <tr {% if sel and v.id == sel.id %}class="table-active"{% endif %}>
+        <td class="mono small text-nowrap">{{ v.created|replace(" UTC", "") }}</td>
+        <td>{{ v.target.name }} <span class="node-id">{{ v.target.id }}</span></td>
+        <td class="mono">{{ v.hop_limit }}</td>
+        <td class="mono">{% if v.hops_out is not none %}{{ v.hops_out }} / {{ v.hops_back if v.hops_back is not none else '—' }}{% else %}<span class="dim">—</span>{% endif %}</td>
+        <td>{{ ui.tr_badge(v) }}</td>
+        <td class="small">{% if v.source == 'cmd' %}<code>cmd trace</code>{% else %}web page{% endif %}</td>
+        <td><div class="row-actions">
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('traceroute_view', id=v.id) }}" title="Show"><i class="bi bi-eye"></i></a>
+          {% if v.status == 'done' %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('map_view', trace=v.id, window='1m') }}" title="Show on map"><i class="bi bi-geo-alt"></i></a>{% endif %}
+        </div></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="empty-state"><i class="bi bi-clock-history"></i>No traceroutes yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+{% if sel and sel.status in ('queued', 'sent') %}
+<script>
+  // Follow the running traceroute: count down and reload when its status changes.
+  (function () {
+    var id = {{ sel.id }}, status = "{{ sel.status }}";
+    var left = document.getElementById('trLeft');
+    setInterval(function () {
+      if (left) {
+        var n = Math.max(0, parseInt(left.getAttribute('data-left'), 10) - 1);
+        left.setAttribute('data-left', n); left.textContent = n + ' s left';
+      }
+    }, 1000);
+    setInterval(function () {
+      fetch('/traceroute/' + id + '.json', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (d.status !== status) location.reload(); })
+        .catch(function () {});
+    }, 3000);
+  })();
+</script>
+{% endif %}
+{% endblock %}

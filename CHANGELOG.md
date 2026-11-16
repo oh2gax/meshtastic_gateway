@@ -65,7 +65,13 @@ User-facing notes are in `doc/whats_new.md` (shown in the What's new window).
 - **Theme Auto / Light / Dark** — theme button is a dropdown; `localStorage['mg-theme']` = `light` |
   `dark`, missing = Auto (default), which follows `prefers-color-scheme` and its `change` event live.
   `mgThemeChoice()` / `mgApplyTheme()` in `<head>`; a value saved by the old toggle is kept.
-- User guide 1.8 with Traceroute, the new Services page, the ACK hops and broadcast hops; demo data and screenshots.
+- **Direct signal per node** — nodes columns `direct_rssi`, `direct_snr`, `direct_ts` (added on start-up,
+  filled once from directly received messages and from nodes whose last packet had 0 hops), updated by
+  `update_node_direct_signal()` for every packet with `hopStart - hopLimit == 0`. Active Nodes and the Map
+  show the last direct values for nodes now heard via relays (clock icon, time in the tooltip, follows the
+  UTC/local switch), grey italic last-hop values for nodes only heard via relays (macro `ui.sig_cell`,
+  `sigInfo()` on the map). RSSI/SNR sorting groups the direct values first (`data-*-grp`).
+- User guide 1.9 with Traceroute, the new Services page, the ACK hops and broadcast hops; demo data and screenshots.
 
 ## [2026-11-15]
 

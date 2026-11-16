@@ -257,3 +257,7 @@ th.sortable.sort-desc::after { content: "\F229"; opacity: 1; color: var(--mg-acc
 th.sortable.sort-asc, th.sortable.sort-desc { color: var(--mg-accent) !important; }
 .nodeitem.focused { border-color: var(--mg-accent); background: var(--mg-accent-soft); }
 .mg-tz-btn { height: 34px; border-radius: 9px; display: inline-flex; align-items: center; gap: .3rem; padding: 0 .55rem; font-size: .8rem; font-weight: 600; }
+
+/* RSSI / SNR: grey italic = only heard via a relay (signal of the relay) */
+.sig-relay { color: var(--mg-muted); font-style: italic; opacity: .8; }
+.sig-lastdirect .bi { font-size: .75em; color: var(--mg-muted); }

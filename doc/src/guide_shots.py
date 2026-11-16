@@ -132,6 +132,12 @@ def build_demo(g) -> None:
                       lat=lat, lon=lon, pos_ts=ago(mins) if lat else None, last_hops=hops)
         if lat:
             g.insert_position(conn, nid, ago(mins), lat, lon, None, 2000)
+    # signal when heard directly: the 0-hop nodes now, and two relayed nodes earlier
+    for nid, ln, sn, hw, lat, lon, rssi, snr, hops, mins in NODES:
+        if hops == 0 and rssi is not None:
+            g.update_node_direct_signal(conn, nid, rssi, snr, ago(mins))
+    g.update_node_direct_signal(conn, "!5e10a004", -79, 3.25, ago(300))     # Lake Base, direct this morning
+    g.update_node_direct_signal(conn, "!5e10a007", -86, 0.5, ago(150))      # Bike Tracker, passed nearby
     for lat, lon, mins in car_track():
         g.insert_position(conn, "!a1b2c3d4", ago(mins), lat, lon, None, 2000)
 

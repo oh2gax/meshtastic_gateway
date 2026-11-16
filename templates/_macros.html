@@ -62,3 +62,17 @@
 {% macro ts(epoch, fallback="") -%}
   <time class="mg-ts" data-ts="{{ epoch if epoch is not none else '' }}">{{ (fallback or '')|replace(' UTC', '') }}</time>
 {%- endmacro %}
+
+{# RSSI / SNR of a node. kind: "direct" (heard directly or hops unknown),
+   "lastdirect" (relayed now; showing the last DIRECT values, dts = when),
+   "relay" (only heard via relays; value is the last hop's). #}
+{% macro sig_cell(value, kind, dts=none, icon=false) -%}
+  {%- if value is none -%}<td class="mono small"></td>
+  {%- elif kind == "relay" -%}
+    <td class="mono small"><span class="sig-relay" title="Heard via a relay: this is the signal of the last hop (the relay), not of this node">{{ value }}</span></td>
+  {%- elif kind == "lastdirect" -%}
+    <td class="mono small"><span class="sig-lastdirect" data-tip="Last heard directly {t}; now heard via a relay" data-tip-ts="{{ dts }}"
+        title="Last heard directly; now heard via a relay">{{ value }}{% if icon %} <i class="bi bi-clock-history"></i>{% endif %}</span></td>
+  {%- else -%}<td class="mono small">{{ value }}</td>
+  {%- endif -%}
+{%- endmacro %}

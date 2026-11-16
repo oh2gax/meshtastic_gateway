@@ -856,6 +856,36 @@ def init_db(conn: sqlite3.Connection) -> None:
                 except Exception:
                     pass
 
+        # Signal of the last packet heard DIRECTLY (0 hops) from each node. The
+        # last_rssi/last_snr columns describe the last hop, which for a relayed
+        # packet is the relay, not the node.
+        if not _col_exists(cur, "nodes", "direct_ts"):
+            try:
+                for col, typ in (("direct_rssi", "REAL"), ("direct_snr", "REAL"), ("direct_ts", "INTEGER")):
+                    if not _col_exists(cur, "nodes", col):
+                        cur.execute(f"ALTER TABLE nodes ADD COLUMN {col} {typ};")
+                # one-time fill from earlier messages that were heard directly
+                cur.execute("""
+                UPDATE nodes SET
+                  direct_ts   = (SELECT m.ts FROM messages m WHERE m.from_id = nodes.node_id AND m.direction = 'in'
+                                   AND m.hop_start IS NOT NULL AND m.hop_start = m.hop_limit AND m.rx_rssi IS NOT NULL
+                                 ORDER BY m.ts DESC LIMIT 1),
+                  direct_rssi = (SELECT m.rx_rssi FROM messages m WHERE m.from_id = nodes.node_id AND m.direction = 'in'
+                                   AND m.hop_start IS NOT NULL AND m.hop_start = m.hop_limit AND m.rx_rssi IS NOT NULL
+                                 ORDER BY m.ts DESC LIMIT 1),
+                  direct_snr  = (SELECT m.rx_snr FROM messages m WHERE m.from_id = nodes.node_id AND m.direction = 'in'
+                                   AND m.hop_start IS NOT NULL AND m.hop_start = m.hop_limit AND m.rx_rssi IS NOT NULL
+                                 ORDER BY m.ts DESC LIMIT 1)
+                """)
+                # nodes whose latest packet was direct: their current values are direct ones
+                cur.execute("""
+                UPDATE nodes SET direct_rssi = last_rssi, direct_snr = last_snr, direct_ts = last_seen_ts
+                WHERE last_hops = 0 AND last_rssi IS NOT NULL
+                  AND (direct_ts IS NULL OR direct_ts < last_seen_ts)
+                """)
+            except Exception as e:
+                print(f"[DB] direct-signal migration: {e}")
+
         # migrate channel_name onto messages/outbox for older DBs
         for tbl in ("messages", "outbox"):
             if not _col_exists(cur, tbl, "channel_name"):
@@ -1116,6 +1146,19 @@ END,
               lat, lon, alt, pos_ts, pos_iso,
               last_hops))
         conn.commit()
+
+def update_node_direct_signal(conn: sqlite3.Connection, node_id: str, rssi: Optional[float],
+                              snr: Optional[float], ts: int) -> None:
+    """Remember the signal of a packet heard directly (0 hops) from node_id."""
+    if not node_id or (rssi is None and snr is None):
+        return
+    with DB_LOCK:
+        conn.execute("""
+        UPDATE nodes SET direct_rssi = ?, direct_snr = ?, direct_ts = ?
+        WHERE node_id = ? AND (direct_ts IS NULL OR direct_ts <= ?)
+        """, (rssi, snr, int(ts), node_id, int(ts)))
+        conn.commit()
+
 
 def insert_position(conn: sqlite3.Connection, node_id: str, ts: int, lat: float, lon: float,
                     alt: Optional[float], keep_last_n: int) -> None:
@@ -1464,7 +1507,7 @@ def list_active_nodes(conn: sqlite3.Connection, window_seconds: int) -> List[sql
         SELECT node_id, node_num, long_name, short_name, hw_model, macaddr,
                last_seen_ts, last_seen_iso, last_rssi, last_snr,
                last_lat, last_lon, last_alt, last_pos_ts, last_pos_iso,
-               last_hops
+               last_hops, direct_rssi, direct_snr, direct_ts
         FROM nodes
         WHERE last_seen_ts IS NOT NULL AND last_seen_ts >= ?
         ORDER BY last_seen_ts DESC
@@ -1637,7 +1680,7 @@ def list_nodes_with_position(conn: sqlite3.Connection, window_seconds: int) -> L
         SELECT node_id, long_name, short_name, hw_model,
                last_seen_iso, last_rssi, last_snr,
                last_lat, last_lon, last_alt, last_pos_iso, last_pos_ts, last_seen_ts,
-               last_hops
+               last_hops, direct_rssi, direct_snr, direct_ts
         FROM nodes
         WHERE last_lat IS NOT NULL AND last_lon IS NOT NULL
           AND last_seen_ts IS NOT NULL AND last_seen_ts >= ?
@@ -2296,6 +2339,11 @@ class Gateway:
                 pos_ts=int(pos.get("time")) if pos and pos.get("time") else None,
                 last_hops=hops_v,
             )
+            if hops_v == 0:
+                try:
+                    update_node_direct_signal(self.db, from_id or "", rx_rssi, rx_snr, rx_time)
+                except Exception:
+                    pass
 
             if pos:
                 p_ts = int(pos.get("time") or rx_time)
@@ -3352,6 +3400,9 @@ def map_data():
             "recent": recent,
             "distance_km": dist_km,
             "hops": r["last_hops"],
+            "direct_rssi": r["direct_rssi"],
+            "direct_snr": r["direct_snr"],
+            "direct_ts": r["direct_ts"],
         })
     return jsonify({"nodes": nodes})
 

@@ -320,6 +320,10 @@
         el.textContent = mgFmtTs(t, mode);
         el.title = (other === 'utc' ? 'UTC ' : 'Local (' + mgUtcOffset() + ') ') + mgFmtTs(t, other);
       });
+      document.querySelectorAll('[data-tip][data-tip-ts]').forEach(function (el) {
+        var t = el.getAttribute('data-tip-ts');
+        if (t) el.title = el.getAttribute('data-tip').replace('{t}', mgFmtTs(t, mode) + (mode === 'local' ? '' : ' UTC'));
+      });
       document.querySelectorAll('option[data-ts]').forEach(function (o) {
         var t = o.getAttribute('data-ts');
         o.textContent = o.getAttribute('data-label') + (t ? ' (' + mgFmtTs(t, mode) + ')' : '');

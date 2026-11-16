@@ -217,7 +217,7 @@ The *Chat* page shows the conversation with a single specific node, direct messa
 
 ### Active Nodes
 
-All heard nodes with timestamp, RSSI/SNR and other per-node info, filtered by a selectable time window. The page header carries two small mono chips: `window=…` (the active time-window filter) and `count=N` (the number of nodes currently shown), so you can see at a glance how many nodes have been heard inside the chosen window.
+All heard nodes with timestamp, RSSI/SNR and other per-node info, filtered by a selectable time window. RSSI/SNR are the node's own signal from the last time it was heard **directly** (0 hops); when a node is now heard via a relay a small clock icon marks these older direct values (the time is in the tooltip), and nodes only ever heard via relays show the last hop's values in grey italics — that is the relay's signal, not the node's. The page header carries two small mono chips: `window=…` (the active time-window filter) and `count=N` (the number of nodes currently shown), so you can see at a glance how many nodes have been heard inside the chosen window.
 
 Two compact columns at the right of the table summarize the radio path:
 

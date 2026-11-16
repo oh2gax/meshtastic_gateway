@@ -117,6 +117,21 @@
   const markers = new Map(); // node_id -> marker
   let selectedTracks = new Set(); // node_id's with tracks enabled
 
+  // RSSI / SNR as on Active Nodes: the last DIRECT values when the node is now
+  // heard via relays, grey when it has only ever been heard via relays.
+  function sigInfo(n) {
+    const relayed = n.hops != null && n.hops > 0;
+    if (relayed && n.direct_ts) return {kind: "lastdirect", rssi: n.direct_rssi, snr: n.direct_snr};
+    return {kind: relayed ? "relay" : "direct", rssi: n.rssi, snr: n.snr};
+  }
+  function sigText(n) {
+    const s = sigInfo(n);
+    const txt = `RSSI ${esc(s.rssi ?? "")} · SNR ${esc(s.snr ?? "")}`;
+    if (s.kind === "relay") return `<span class="sig-relay" title="Heard via a relay: the signal of the last hop, not of this node">${txt}</span>`;
+    if (s.kind === "lastdirect") return `<span class="sig-lastdirect" title="Last heard directly ${esc(mgFmtTs(n.direct_ts))}${mgTzMode() === "local" ? "" : " UTC"}; now via a relay">${txt} <i class="bi bi-clock-history"></i></span>`;
+    return txt;
+  }
+
   function popupHtml(n) {
     const hopsStr = (n.hops != null) ? `${esc(n.hops)}` : "—";
     return `
@@ -126,7 +141,13 @@
         <hr style="margin:6px 0">
         <div><b>Last seen:</b> ${esc(n.last_seen_ts ? mgFmtTs(n.last_seen_ts) : n.last_seen)}</div>
         <div><b>Pos time:</b> ${esc(n.pos_ts ? mgFmtTs(n.pos_ts) : n.pos_time)}</div>
-        <div><b>RSSI/SNR:</b> ${esc(n.rssi)} / ${esc(n.snr)}</div>
+        ${(() => {
+          const s = sigInfo(n);
+          if (s.kind === "relay") return `<div><b>RSSI/SNR:</b> <span class="sig-relay">${esc(n.rssi)} / ${esc(n.snr)}</span> <span style="color:#888">(last hop, via a relay)</span></div>`;
+          if (s.kind === "lastdirect") return `<div><b>RSSI/SNR:</b> ${esc(n.direct_rssi)} / ${esc(n.direct_snr)} <span style="color:#888">(last direct, ${esc(mgFmtTs(n.direct_ts))})</span></div>
+              <div><b>Now via relay:</b> <span class="sig-relay">${esc(n.rssi)} / ${esc(n.snr)}</span> <span style="color:#888">(last hop)</span></div>`;
+          return `<div><b>RSSI/SNR:</b> ${esc(n.rssi)} / ${esc(n.snr)}</div>`;
+        })()}
         <div><b>Lat/Lon:</b> ${Number(n.lat).toFixed(5)}, ${Number(n.lon).toFixed(5)}</div>
         <div><b>Hops:</b> ${hopsStr}</div>
         ${n.distance_km != null ? `<div><b>Distance:</b> ${Number(n.distance_km).toFixed(1)} km</div>` : ""}
@@ -218,7 +239,7 @@
           <div>
             <div class="fw-semibold"><span class="dot ${n.recent ? "dot-recent" : "dot-old"}"></span>${esc(n.name)}</div>
             <div class="small text-body-secondary mono">${esc(n.node_id)}${hopsStr}</div>
-            <div class="small text-body-secondary mono">RSSI ${esc(n.rssi)} · SNR ${esc(n.snr)}${distStr}</div>
+            <div class="small text-body-secondary mono">${sigText(n)}${distStr}</div>
           </div>
           <div class="text-end">
             <label class="small text-body-secondary text-nowrap">

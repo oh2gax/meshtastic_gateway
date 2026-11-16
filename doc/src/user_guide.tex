@@ -43,7 +43,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\itshape Meshtastic Gateway --- how to read and use the web page}
-\fancyhead[R]{\small\itshape User guide, version 1.8 --- November 2026}
+\fancyhead[R]{\small\itshape User guide, version 1.9 --- November 2026}
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0.3pt}
 \hypersetup{pdftitle={Meshtastic Gateway - User guide},pdfauthor={Otso Laakso, OH2GAX}}
@@ -69,7 +69,7 @@
 \begin{document}
 \thispagestyle{plain}
 \begin{center}
-{\small Meshtastic Gateway project \quad$\cdot$\quad User guide, version 1.8 \quad$\cdot$\quad 16 November 2026}\par\vspace{10pt}
+{\small Meshtastic Gateway project \quad$\cdot$\quad User guide, version 1.9 \quad$\cdot$\quad 16 November 2026}\par\vspace{10pt}
 {\LARGE\bfseries Meshtastic Gateway}\par\vspace{5pt}
 {\large\bfseries How to read and use the web page:\\ nodes, messages, the map, services and the gateway itself}\par\vspace{8pt}
 {\normalsize Otso Laakso (OH2GAX)}\par
@@ -180,14 +180,21 @@ Last seen & When any packet from the node was last received (UTC or local time, 
 Node & The node ID. \\
 Name & Long name and, in brackets, the short name. A node whose names have not been heard yet is shown by its ID (\cmd{!5e10a009} in the figure). \\
 HW & The hardware model the node reports, e.g.\ \cmd{HELTEC\_V3}, \cmd{RAK4631}, \cmd{TRACKER\_T1000\_E}. \\
-RSSI, SNR & Signal strength and signal-to-noise ratio of the last packet received from it. For a node more than 0~hops away these describe the \emph{last relay}, not the node itself. \\
+RSSI, SNR & The node's own signal strength and signal-to-noise ratio, from the last packet the gateway heard \emph{directly} from it (0~hops). See \emph{Whose signal?} below. \\
 Pos & \textcolor{ackY}{Y} when the node has sent a position, --- when not. \\
 Hops & Hops of the most recent packet: 0 = heard directly, --- = unknown. \\
 Distance & How far the node's last position is from the gateway's own position, in km; --- when either position is unknown. \\
 \bottomrule
 \end{tabularx}
 
-\lead{Sorting.} Click a column heading --- \ui{Last seen}, \ui{Name}, \ui{RSSI}, \ui{SNR}, \ui{Hops} or \ui{Distance} --- to sort the list by it; click again to reverse the order. The heading shows $\blacktriangle$ or $\blacktriangledown$. Nodes without a value (no position, no name \dots) always come last. The page remembers the order, also when it refreshes itself; at first it is the newest first.
+\lead{Whose signal?} The radio measures RSSI and SNR from the last transmission it heard. When a packet arrives over hops, that transmission came from the last relay, so its values describe the relay, not the node. The page therefore shows three cases:
+\begin{itemize}[leftmargin=1.2em]
+\item \textbf{plain} values: the node is heard directly now;
+\item values with a small \textbf{clock icon}: the node is now heard via a relay, and these are its own values from the last time it was heard directly; pointing at them shows when (\emph{Lake Base} and \emph{Bike Tracker} in the figure);
+\item \textbf{grey italic} values: the node has only been heard via relays; these are the last relay's values, not the node's.
+\end{itemize}
+
+\lead{Sorting.} Click a column heading --- \ui{Last seen}, \ui{Name}, \ui{RSSI}, \ui{SNR}, \ui{Hops} or \ui{Distance} --- to sort the list by it; click again to reverse the order. The heading shows $\blacktriangle$ or $\blacktriangledown$. Nodes without a value (no position, no name \dots) always come last, and when sorting by RSSI or SNR the grey relay values come after the nodes' own direct values. The page remembers the order, also when it refreshes itself; at first it is the newest first.
 
 The buttons at the end of a row are, from the left: the green \textbf{traceroute} button with its small \ui{$\blacktriangledown$} (Section~\ref{sec:trace}), the \textbf{map} button, which opens the Map zoomed to the node with its details open (grey when the node's position is not known), \ui{Chat} with that node and the \ui{Send} form addressed to it.
 
@@ -274,6 +281,7 @@ The Send form writes a new message.
 The map shows the last known position of every node that has sent one and was heard within the \textbf{window} (\ui{2h} \dots\ \ui{1m}).
 \begin{itemize}[leftmargin=1.2em]
 \item \textbf{Circles}: \textcolor{ackY}{green} when the node was heard in the last 15 minutes, \textcolor{accent}{blue} when earlier. Point at a circle to see the short name; click it for the details: name, ID, hardware, last seen, position time, RSSI/SNR, coordinates, hops and the distance from the gateway, with links to \ui{Chat} and \ui{Traceroute}. The details stay open while the map refreshes.
+\item The \textbf{signal} (RSSI/SNR) in the list and in the details follows the same rules as in Active Nodes: the node's own values from when it was last heard directly, or grey values when it has only been heard via relays; the details then also show the current relayed values.
 \item \textbf{From Active Nodes}: the map button on a node's row opens the map zoomed to that node, with its details open and the node highlighted in the list.
 \item \textbf{The list on the left} has the same nodes with ID, hops, signal and distance from the gateway (the gateway's own radio needs a position for the distances). Click a node to zoom to it. \ui{Sort} orders the list by last seen, distance, name or hops, and the button next to it reverses the order; the choice is remembered.
 \item \textbf{Tracks}: tick \ui{track} for a node to draw where it has been. \ui{Track min} sets how many minutes back (up to 1440 = 24 hours, but never before local midnight). \ui{Tracks} clears them all.
@@ -441,7 +449,7 @@ cd \textasciitilde/meshtastic\_gateway \&\& ./update.sh & Update to the newest v
 \section{Limitations and good to know}\label{sec:limits}
 \begin{itemize}[leftmargin=1.2em]
 \item \textbf{The gateway hears what its radio hears.} A node that is out of reach of the radio and of every relay is not in the list, and its broadcasts are not on the page.
-\item \textbf{RSSI and SNR describe the last hop.} For a node several hops away they tell how well the last relay was heard, not the node itself.
+\item \textbf{RSSI and SNR are measured on the last hop.} For a node heard over hops they describe the relay. The page shows the node's own values from the last time it was heard directly, and grey values when it never was (Section~\ref{sec:nodes}). The Inbox and Broadcast pages show the signal of each message as received, so there it is the last hop's.
 \item \textbf{\ackS{} is not a failure} and \ackY{} needs an answer from the destination itself (Section~\ref{sec:outbox}).
 \item \textbf{Names arrive later than packets.} A new node is shown by its ID until its NodeInfo is heard; nameless nodes are cleaned away after 24 hours.
 \item \textbf{One connection at a time.} The radio's WiFi interface normally serves only one client: while the gateway is connected, the Meshtastic app cannot use the radio over WiFi. On these ESP32 radios Bluetooth is switched off while WiFi is on, so the app has to wait or use another node.

@@ -26,8 +26,8 @@
       <th>Node</th>
       <th class="sortable" data-key="name" data-type="text" title="Sort by name">Name</th>
       <th>HW</th>
-      <th class="sortable" data-key="rssi" data-type="num" title="Sort by RSSI">RSSI</th>
-      <th class="sortable" data-key="snr" data-type="num" title="Sort by SNR">SNR</th>
+      <th class="sortable" data-key="rssi" data-type="num" title="RSSI of the node when heard directly; grey = only heard via a relay (the relay's signal). Click to sort.">RSSI</th>
+      <th class="sortable" data-key="snr" data-type="num" title="SNR of the node when heard directly; grey = only heard via a relay (the relay's signal). Click to sort.">SNR</th>
       <th title="Position known?">Pos</th>
       <th class="sortable" data-key="hops" data-type="num" title="Hops travelled (0 = direct neighbor). Click to sort.">Hops</th>
       <th class="sortable text-end" data-key="dist" data-type="num"
@@ -36,18 +36,23 @@
     </tr></thead>
     <tbody>
     {% for r in rows %}
+      {%- set relayed = r['last_hops'] is not none and r['last_hops'] > 0 -%}
+      {%- set use_direct = relayed and r['direct_ts'] is not none -%}
+      {%- set sig_kind = ('lastdirect' if use_direct else 'relay') if relayed else 'direct' -%}
+      {%- set sig_rssi = r['direct_rssi'] if use_direct else r['last_rssi'] -%}
+      {%- set sig_snr = r['direct_snr'] if use_direct else r['last_snr'] -%}
       <tr data-seen="{{ r['last_seen_ts'] or '' }}"
           data-name="{{ node_display(r['long_name'], r['short_name'], '')|lower }}"
-          data-rssi="{{ r['last_rssi'] if r['last_rssi'] is not none else '' }}"
-          data-snr="{{ r['last_snr'] if r['last_snr'] is not none else '' }}"
+          data-rssi="{{ sig_rssi if sig_rssi is not none else '' }}" data-rssi-grp="{{ 1 if sig_kind == 'relay' else 0 }}"
+          data-snr="{{ sig_snr if sig_snr is not none else '' }}" data-snr-grp="{{ 1 if sig_kind == 'relay' else 0 }}"
           data-hops="{{ r['last_hops'] if r['last_hops'] is not none else '' }}"
           data-dist="{{ r['distance_km'] if r['distance_km'] is not none else '' }}">
         <td class="mono small text-nowrap">{{ ui.ts(r["last_seen_ts"], r["last_seen_iso"]) }}</td>
         <td class="node-id">{{ r["node_id"] }}</td>
         <td class="fw-medium">{{ node_display(r["long_name"], r["short_name"], r["node_id"]) }}</td>
         <td class="mono small dim">{{ r["hw_model"] or "" }}</td>
-        <td class="mono small">{{ r["last_rssi"] if r["last_rssi"] is not none else "" }}</td>
-        <td class="mono small">{{ r["last_snr"] if r["last_snr"] is not none else "" }}</td>
+        {{ ui.sig_cell(sig_rssi, sig_kind, r['direct_ts']) }}
+        {{ ui.sig_cell(sig_snr, sig_kind, r['direct_ts'], icon=true) }}
         <td class="mono">
           {% if r["last_lat"] is not none and r["last_lon"] is not none %}<span class="text-success">Y</span>{% else %}<span class="dim">—</span>{% endif %}
         </td>
@@ -115,6 +120,9 @@
       var type = th.getAttribute('data-type');
       var rows = Array.prototype.slice.call(tbody.rows).filter(function (r) { return r.hasAttribute('data-seen'); });
       rows.sort(function (a, b) {
+        var ga = parseInt(a.getAttribute('data-' + key + '-grp') || '0', 10);
+        var gb = parseInt(b.getAttribute('data-' + key + '-grp') || '0', 10);
+        if (ga !== gb) return ga - gb;          // direct signals first
         var x = value(a, key, type), y = value(b, key, type);
         if (x === null && y === null) return 0;
         if (x === null) return 1;

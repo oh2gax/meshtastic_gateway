@@ -50,7 +50,12 @@ User-facing notes are in `doc/whats_new.md` (shown in the What's new window).
   (`th.sortable`, `data-*` values on the rows, empty values last, state in `localStorage['mg-nodes-sort']`).
 - **Map list sorting** — Sort selector (last seen / distance / name / hops) and direction button,
   applied on every 5-second refresh, state in `localStorage['mg-map-sort']`.
-- User guide 1.6 with Traceroute, the new Services page, the ACK hops and broadcast hops; demo data and screenshots.
+- **Show on map from Active Nodes** — map button per row (`/map?focus=<id>&window=<window>`, disabled when
+  no position); the map zooms to the node, opens its popup and highlights it in the list (`focusNode`, once
+  per page load); a note when the node has no position in the window. `focus` must match `![0-9a-f]{8}`.
+- **Map popups survive the refresh** — the open popup is reopened after the 5-second marker redraw
+  (clearing the marker layer used to close it).
+- User guide 1.7 with Traceroute, the new Services page, the ACK hops and broadcast hops; demo data and screenshots.
 
 ## [2026-11-15]
 

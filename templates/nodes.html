@@ -77,6 +77,11 @@
               </ul>
             </form>
             {% endif %}
+            {% if r["last_lat"] is not none and r["last_lon"] is not none %}
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('map_view', focus=r['node_id'], window=window) }}" title="Show on the map"><i class="bi bi-geo-alt"></i></a>
+            {% else %}
+              <span class="btn btn-sm btn-outline-secondary disabled" title="No position known" aria-disabled="true"><i class="bi bi-geo-alt"></i></span>
+            {% endif %}
             <a class="btn btn-sm btn-outline-primary" href="{{ url_for('chat_with', node_id=r['node_id']) }}" title="Chat"><i class="bi bi-chat-dots"></i></a>
             <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('send_form', to_id=r['node_id']) }}" title="Send"><i class="bi bi-pencil-square"></i></a>
           </div>

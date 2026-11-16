@@ -248,3 +248,4 @@ th.sortable::after { content: "\F127"; font-family: "bootstrap-icons"; font-size
 th.sortable.sort-asc::after { content: "\F235"; opacity: 1; color: var(--mg-accent); }
 th.sortable.sort-desc::after { content: "\F229"; opacity: 1; color: var(--mg-accent); }
 th.sortable.sort-asc, th.sortable.sort-desc { color: var(--mg-accent) !important; }
+.nodeitem.focused { border-color: var(--mg-accent); background: var(--mg-accent-soft); }

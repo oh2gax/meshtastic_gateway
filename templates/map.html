@@ -175,6 +175,27 @@
     saveSort(); showSortState(); setNodeList(lastNodes);
   });
 
+  // ---- Focus on one node (/map?focus=!xxxxxxxx, e.g. from Active Nodes) ----
+  const FOCUS = {{ focus|default("")|tojson }};
+  let focusDone = false;
+  function focusNode(nodes) {
+    if (!FOCUS || focusDone) return;
+    focusDone = true;
+    const n = nodes.find(x => x.node_id === FOCUS);
+    if (!n) {
+      const el = document.getElementById("trLegend");
+      el.innerHTML = `<div class="d-flex justify-content-between gap-2"><span><i class="bi bi-info-circle"></i> ${esc(FOCUS)} has no position in this time window.</span>
+        <a href="/map?window={{ window }}" class="btn-close" style="font-size:.6rem" title="Close"></a></div>`;
+      el.style.display = "";
+      return;
+    }
+    map.setView([n.lat, n.lon], Math.max(map.getZoom(), 14));
+    const m = markers.get(FOCUS);
+    if (m) m.openPopup();
+    const item = document.querySelector(`#nodeList .nodeitem[data-node="${CSS.escape(FOCUS)}"]`);
+    if (item) item.scrollIntoView({block: "nearest"});
+  }
+
   function setNodeList(nodes) {
     lastNodes = nodes;
     nodes = sortNodes(nodes);
@@ -186,7 +207,8 @@
     }
     for (const n of nodes) {
       const item = document.createElement("div");
-      item.className = "p-2 rounded nodeitem";
+      item.className = "p-2 rounded nodeitem" + (n.node_id === FOCUS ? " focused" : "");
+      item.setAttribute("data-node", n.node_id);
 
       const checked = selectedTracks.has(n.node_id) ? "checked" : "";
       const distStr = (n.distance_km != null) ? ` · <span class="text-nowrap">${Number(n.distance_km).toFixed(1)} km</span>` : "";
@@ -235,6 +257,9 @@
 
     setNodeList(data.nodes);
 
+    // Keep an open popup open across the refresh (clearing the layer closes it).
+    let openId = null;
+    for (const [id, mk] of markers) { if (mk.isPopupOpen && mk.isPopupOpen()) { openId = id; break; } }
     markerLayer.clearLayers();
     for (const n of data.nodes) {
       const fill   = n.recent ? "#22c55e" : "#3b82f6";
@@ -262,6 +287,8 @@
       m.addTo(markerLayer);
     }
 
+    if (openId && markers.has(openId) && markerLayer.hasLayer(markers.get(openId))) markers.get(openId).openPopup();
+    focusNode(data.nodes);
     await refreshTracks();
   }
 

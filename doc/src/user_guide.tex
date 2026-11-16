@@ -43,7 +43,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\itshape Meshtastic Gateway --- how to read and use the web page}
-\fancyhead[R]{\small\itshape User guide, version 1.6 --- November 2026}
+\fancyhead[R]{\small\itshape User guide, version 1.7 --- November 2026}
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0.3pt}
 \hypersetup{pdftitle={Meshtastic Gateway - User guide},pdfauthor={Otso Laakso, OH2GAX}}
@@ -69,7 +69,7 @@
 \begin{document}
 \thispagestyle{plain}
 \begin{center}
-{\small Meshtastic Gateway project \quad$\cdot$\quad User guide, version 1.6 \quad$\cdot$\quad 16 November 2026}\par\vspace{10pt}
+{\small Meshtastic Gateway project \quad$\cdot$\quad User guide, version 1.7 \quad$\cdot$\quad 16 November 2026}\par\vspace{10pt}
 {\LARGE\bfseries Meshtastic Gateway}\par\vspace{5pt}
 {\large\bfseries How to read and use the web page:\\ nodes, messages, the map, services and the gateway itself}\par\vspace{8pt}
 {\normalsize Otso Laakso (OH2GAX)}\par
@@ -186,7 +186,7 @@ Distance & How far the node's last position is from the gateway's own position, 
 
 \lead{Sorting.} Click a column heading --- \ui{Last seen}, \ui{Name}, \ui{RSSI}, \ui{SNR}, \ui{Hops} or \ui{Distance} --- to sort the list by it; click again to reverse the order. The heading shows $\blacktriangle$ or $\blacktriangledown$. Nodes without a value (no position, no name \dots) always come last. The page remembers the order, also when it refreshes itself; at first it is the newest first.
 
-The buttons at the end of a row are, from the left: the green \textbf{traceroute} button with its small \ui{$\blacktriangledown$} (Section~\ref{sec:trace}), \ui{Chat} with that node and the \ui{Send} form addressed to it.
+The buttons at the end of a row are, from the left: the green \textbf{traceroute} button with its small \ui{$\blacktriangledown$} (Section~\ref{sec:trace}), the \textbf{map} button, which opens the Map zoomed to the node with its details open (grey when the node's position is not known), \ui{Chat} with that node and the \ui{Send} form addressed to it.
 
 \infobox{Reading the list.}{Nodes with 0~hops and a good SNR are your direct neighbours: these are the ones that carry your messages into the mesh. A node that is heard only with 3--4~hops is far away or behind hills; DMs to it take longer and are more often marked \ackS{} (Section~\ref{sec:outbox}).}
 
@@ -270,7 +270,8 @@ The Send form writes a new message.
 
 The map shows the last known position of every node that has sent one and was heard within the \textbf{window} (\ui{2h} \dots\ \ui{1m}).
 \begin{itemize}[leftmargin=1.2em]
-\item \textbf{Circles}: \textcolor{ackY}{green} when the node was heard in the last 15 minutes, \textcolor{accent}{blue} when earlier. Point at a circle to see the short name; click it for the details: name, ID, hardware, last seen, position time, RSSI/SNR, coordinates, hops and the distance from the gateway.
+\item \textbf{Circles}: \textcolor{ackY}{green} when the node was heard in the last 15 minutes, \textcolor{accent}{blue} when earlier. Point at a circle to see the short name; click it for the details: name, ID, hardware, last seen, position time, RSSI/SNR, coordinates, hops and the distance from the gateway, with links to \ui{Chat} and \ui{Traceroute}. The details stay open while the map refreshes.
+\item \textbf{From Active Nodes}: the map button on a node's row opens the map zoomed to that node, with its details open and the node highlighted in the list.
 \item \textbf{The list on the left} has the same nodes with ID, hops, signal and distance from the gateway (the gateway's own radio needs a position for the distances). Click a node to zoom to it. \ui{Sort} orders the list by last seen, distance, name or hops, and the button next to it reverses the order; the choice is remembered.
 \item \textbf{Tracks}: tick \ui{track} for a node to draw where it has been. \ui{Track min} sets how many minutes back (up to 1440 = 24 hours, but never before local midnight). \ui{Tracks} clears them all.
 \item \ui{Refresh} redraws the map every 2, 5 or 10 seconds without reloading the page, so a moving node is followed.
@@ -452,6 +453,7 @@ I want to \dots & Do this \\
 see who is on the air & \ui{Active Nodes}, window \ui{2h}; \ui{1d} or \ui{1w} for longer \\
 find the nearest or farthest nodes & \ui{Active Nodes}: click the \ui{Distance} heading (or \ui{Sort} on the map) \\
 see where they are & \ui{Map}; click a node in the list to zoom; tick \ui{track} for its route \\
+see one node on the map & the map button on its row in \ui{Active Nodes} \\
 see the path to a node & the green route button in \ui{Active Nodes} (\ui{$\blacktriangledown$} for the hop limit), then \ui{Show on map} \\
 read new messages & the red envelope badge or \ui{Inbox}; a whole conversation: \ui{Chat} \\
 answer a message & \ui{Reply} in the Inbox, or write in the \ui{Chat} \\

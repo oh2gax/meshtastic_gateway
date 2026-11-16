@@ -3211,9 +3211,12 @@ def map_view():
         trace_id = int(request.args.get("trace", "0") or 0)
     except Exception:
         trace_id = 0
+    focus = (request.args.get("focus", "") or "").strip()
+    if not re.fullmatch(r"![0-9a-fA-F]{8}", focus):
+        focus = ""
     return render_template("map.html", host=HOST, rows=rows, window=window, track_n=track_n,
                            center_lat=center_lat, center_lon=center_lon,
-                           carto_api_key=CARTO_API_KEY, trace_id=trace_id)
+                           carto_api_key=CARTO_API_KEY, trace_id=trace_id, focus=focus)
 
 @app.get("/traceroute")
 def traceroute_view():

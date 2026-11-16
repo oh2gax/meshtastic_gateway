@@ -43,7 +43,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\itshape Meshtastic Gateway --- how to read and use the web page}
-\fancyhead[R]{\small\itshape User guide, version 1.7 --- November 2026}
+\fancyhead[R]{\small\itshape User guide, version 1.8 --- November 2026}
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0.3pt}
 \hypersetup{pdftitle={Meshtastic Gateway - User guide},pdfauthor={Otso Laakso, OH2GAX}}
@@ -69,7 +69,7 @@
 \begin{document}
 \thispagestyle{plain}
 \begin{center}
-{\small Meshtastic Gateway project \quad$\cdot$\quad User guide, version 1.7 \quad$\cdot$\quad 16 November 2026}\par\vspace{10pt}
+{\small Meshtastic Gateway project \quad$\cdot$\quad User guide, version 1.8 \quad$\cdot$\quad 16 November 2026}\par\vspace{10pt}
 {\LARGE\bfseries Meshtastic Gateway}\par\vspace{5pt}
 {\large\bfseries How to read and use the web page:\\ nodes, messages, the map, services and the gateway itself}\par\vspace{8pt}
 {\normalsize Otso Laakso (OH2GAX)}\par
@@ -86,7 +86,7 @@
 \end{itemize}
 Section~\ref{sec:mesh} explains Meshtastic as far as needed to read the page; Section~\ref{sec:pi} is for the person who runs the gateway, Section~\ref{sec:limits} lists what the page cannot tell and Section~\ref{sec:quick} is a one-page quick reference.}
 
-\infobox{About the figures.}{All figures are screenshots of the real page, but filled with an \emph{invented demo database}: the nodes (\emph{Harbour Relay}, \emph{Hill Top Router} \dots), their positions and the messages are made up, so that nobody's private messages or home location appear in this guide. In the map figure the background is a plain outline of the coast; on the real page it is a detailed street map. All times on the page are UTC (Finnish time is UTC\,+\,2, in summer UTC\,+\,3).}
+\infobox{About the figures.}{All figures are screenshots of the real page, but filled with an \emph{invented demo database}: the nodes (\emph{Harbour Relay}, \emph{Hill Top Router} \dots), their positions and the messages are made up, so that nobody's private messages or home location appear in this guide. In the map figure the background is a plain outline of the coast; on the real page it is a detailed street map. The times in the figures are UTC; the page can also show local time (Section~\ref{sec:page}).}
 
 {\small\tableofcontents}
 
@@ -142,10 +142,10 @@ Section~\ref{sec:mesh} explains Meshtastic as far as needed to read the page; Se
 
 \lead{Services.} When a node sends a service command as a direct message, the gateway fetches the answer from the internet and sends it back as a DM. This happens in the background, so the radio keeps receiving while the answer is fetched.
 
-\infobox{Words used in this guide.}{\textbf{Node}: a Meshtastic radio. \textbf{Node ID}: its fixed address, \cmd{!} and eight hex digits. \textbf{DM}: direct (private) message. \textbf{Broadcast}: a message to everybody on a channel. \textbf{Hops}: how many relays a packet passed on its way to the gateway (0 = heard directly). \textbf{RSSI}: received signal strength in dBm (about $-40$ is very strong, $-120$ is at the limit). \textbf{SNR}: signal-to-noise ratio in dB; LoRa can still decode below 0\,dB, down to about $-20$\,dB. \textbf{ACK}: acknowledgement of a DM. \textbf{UTC}: all times on the page are UTC.}
+\infobox{Words used in this guide.}{\textbf{Node}: a Meshtastic radio. \textbf{Node ID}: its fixed address, \cmd{!} and eight hex digits. \textbf{DM}: direct (private) message. \textbf{Broadcast}: a message to everybody on a channel. \textbf{Hops}: how many relays a packet passed on its way to the gateway (0 = heard directly). \textbf{RSSI}: received signal strength in dBm (about $-40$ is very strong, $-120$ is at the limit). \textbf{SNR}: signal-to-noise ratio in dB; LoRa can still decode below 0\,dB, down to about $-20$\,dB. \textbf{ACK}: acknowledgement of a DM. \textbf{UTC}: the page shows times in UTC unless you switch to local time.}
 
 \section{The page at a glance}\label{sec:page}
-\fig{navbar.jpg}{1.0}{The top bar. From the left: the pages, the unread-messages badge, What's new, the theme switch and Send.}
+\fig{navbar.jpg}{1.0}{The top bar. From the left: the pages, the unread-messages badge, What's new, the UTC / local time switch, the theme menu and Send.}
 
 \lead{The top bar} stays at the top of every page:
 \begin{itemize}[leftmargin=1.2em]
@@ -153,12 +153,15 @@ Section~\ref{sec:mesh} explains Meshtastic as far as needed to read the page; Se
 \item \ui{Broadcast} turns \textbf{red with a red dot} when a new broadcast has arrived since you last opened the Broadcast page;
 \item the red \textbf{envelope badge} (``2 new'') appears when there are unread direct messages; it opens the Inbox. It is checked every 5 seconds, so it appears without reloading the page;
 \item the \textbf{sparkle button} opens \ui{What's new}; a red dot on it means notes you have not read yet (Section~\ref{sec:whatsnew});
-\item the \textbf{moon / sun} button switches between light and dark; the choice is remembered in the browser;
+\item the \textbf{clock} button (\ui{UTC} / \ui{Local}) chooses the time zone of all times, see below;
+\item the \textbf{theme} button (a half-filled circle, sun or moon) opens the menu \ui{Auto} / \ui{Light} / \ui{Dark} (Section~\ref{sec:theme});
 \item \ui{Send} opens the form for a new message (Section~\ref{sec:send}).
 \end{itemize}
 On a narrow screen the page names fold into the \ui{$\equiv$} menu button (Figure~\ref{fig:phone}).
 
-\lead{The footer} shows the IP address of the radio, the version of the gateway (click it for What's new) and a reminder that all times are UTC.
+\lead{The footer} shows the IP address of the radio, the version of the gateway (click it for What's new) and whether the times are in UTC or local time.
+
+\lead{UTC or local time.} The \ui{UTC} button in the top bar (on a phone: \ui{Time} in the \ui{$\equiv$} menu) switches every time on every page between UTC and the local time of the computer or phone you are using, for example Finnish time (UTC\,+\,2, in summer UTC\,+\,3). The button shows the zone in use; pointing at any time shows it in the other zone. The choice is remembered in the browser. The gateway itself always stores UTC, and service replies such as METAR and WSPR keep their own UTC (\cmd{Z}) times.
 
 \lead{Auto-refresh.} Most pages have a small \ui{Off / 10s / 30s / 60s} selector with a circular-arrow icon. It reloads the page at that interval. The choice is remembered per page; the Outbox starts at 10\,s, the others at Off. While you are typing a message the reload waits, so nothing you write is lost.
 
@@ -173,7 +176,7 @@ The start page lists every node heard within the chosen \textbf{window}: \ui{2h}
 \toprule
 Column & Meaning \\
 \midrule
-Last seen & When any packet from the node was last received (UTC). \\
+Last seen & When any packet from the node was last received (UTC or local time, see Section~\ref{sec:page}). \\
 Node & The node ID. \\
 Name & Long name and, in brackets, the short name. A node whose names have not been heard yet is shown by its ID (\cmd{!5e10a009} in the figure). \\
 HW & The hardware model the node reports, e.g.\ \cmd{HELTEC\_V3}, \cmd{RAK4631}, \cmd{TRACKER\_T1000\_E}. \\
@@ -400,7 +403,12 @@ The sparkle button in the top bar (or the version in the footer) opens a window 
 
 \section{Light and dark}\label{sec:theme}
 \fig{dark_chat.jpg}{0.9}{The same chat in dark mode.}
-The moon / sun button switches every page between light and dark; the first time, the page follows the setting of your computer or phone. The map changes to a dark map at the same time.
+The theme button in the top bar opens a small menu:
+\begin{itemize}[leftmargin=1.2em]
+\item \ui{Auto} (the default) follows the light or dark setting of your computer or phone, and changes with it --- for example when the phone turns dark in the evening;
+\item \ui{Light} and \ui{Dark} keep that theme whatever the device does.
+\end{itemize}
+The button shows the choice: a half-filled circle for Auto, a sun for Light, a moon for Dark. The choice is remembered in the browser. The map changes to a dark map at the same time.
 
 \section{Running the gateway on a Raspberry Pi}\label{sec:pi}
 This section is for the person who runs the gateway. The full installation is in the \texttt{README.md} of the repository; here are the everyday things.
@@ -439,7 +447,7 @@ cd \textasciitilde/meshtastic\_gateway \&\& ./update.sh & Update to the newest v
 \item \textbf{One connection at a time.} The radio's WiFi interface normally serves only one client: while the gateway is connected, the Meshtastic app cannot use the radio over WiFi. On these ESP32 radios Bluetooth is switched off while WiFi is on, so the app has to wait or use another node.
 \item \textbf{Positions only when shared.} A node is on the map only if its owner lets it send its position, and often only to a precision its owner chose.
 \item \textbf{No login.} Anybody who can open the page can read the messages and send in the gateway's name. Keep it on the home network.
-\item \textbf{UTC.} All times are UTC; only the map's track day starts at local midnight.
+\item \textbf{UTC by default.} Times are shown in UTC unless you switch to local time; the map's track day starts at local midnight of the gateway, and \emph{Today} on the Services page counts by UTC.
 \item \textbf{A traceroute is a snapshot.} The next one may take another path, and nodes that cannot be identified show as \textbf{?}.
 \item \textbf{Services need the internet} on the Pi, and \cmd{cmd wspr} needs the WSPR Logger to be up.
 \end{itemize}
@@ -467,6 +475,7 @@ turn a service off & \ui{Services} $\rightarrow$ the switch on its card; all at 
 remove an old node & \ui{Status} $\rightarrow$ \ui{Remove specific node} \\
 look at raw packets & \ui{Debug}; \ui{Pause} to read, \ui{Copy} to save \\
 see what changed & the sparkle button $\rightarrow$ \ui{What's new} \\
+see times in Finnish time & the \ui{UTC} button in the top bar $\rightarrow$ \ui{Local} \\
 update the gateway & on the Pi: \cmd{cd \textasciitilde/meshtastic\_gateway \&\& ./update.sh} \\
 \bottomrule
 \end{tabularx}

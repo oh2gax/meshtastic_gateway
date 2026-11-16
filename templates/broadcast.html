@@ -31,7 +31,7 @@
     <b><i class="bi bi-hourglass-split"></i> Queued broadcast messages{% if not all_view %} on {{ selected_label }}{% endif %}:</b>
     <ul class="mb-0">
       {% for q in queued %}
-        <li class="mono small">#{{ q["id"] }} · {{ q["created_ts_iso"] }}{% if all_view %} · {{ q["ch_label"] }}{% endif %} · {{ q["text"] }}</li>
+        <li class="mono small">#{{ q["id"] }} · {{ ui.ts(q["created_ts"], q["created_ts_iso"]) }}{% if all_view %} · {{ q["ch_label"] }}{% endif %} · {{ q["text"] }}</li>
       {% endfor %}
     </ul>
   </div>
@@ -48,7 +48,7 @@
           {% else %}
             <span class="who">Me</span>
           {% endif %}
-          <span>{{ m["ts_iso"] }}</span>
+          <span>{{ ui.ts(m["ts"], m["ts_iso"]) }}</span>
           {% if m["direction"] == "in" %}
             {% if m["hops"] is not none %}<span>&middot; Hops {{ m["hops"] }}</span>{% endif %}
             <span>&middot; RSSI {{ m["rx_rssi"] }}, SNR {{ m["rx_snr"] }}</span>

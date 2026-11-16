@@ -1636,7 +1636,7 @@ def list_nodes_with_position(conn: sqlite3.Connection, window_seconds: int) -> L
         cur.execute("""
         SELECT node_id, long_name, short_name, hw_model,
                last_seen_iso, last_rssi, last_snr,
-               last_lat, last_lon, last_alt, last_pos_iso, last_seen_ts,
+               last_lat, last_lon, last_alt, last_pos_iso, last_pos_ts, last_seen_ts,
                last_hops
         FROM nodes
         WHERE last_lat IS NOT NULL AND last_lon IS NOT NULL
@@ -2027,7 +2027,8 @@ def tr_view(conn: sqlite3.Connection, row: sqlite3.Row, my_id: Optional[str]) ->
     left = None
     if row["status"] == "sent" and row["sent_ts"]:
         left = max(0, int(row["sent_ts"]) + timeout - utc_ts())
-    return {"id": row["id"], "created": row["created_ts_iso"], "status": row["status"],
+    return {"id": row["id"], "created": row["created_ts_iso"], "created_ts": row["created_ts"],
+            "status": row["status"],
             "target": target, "hop_limit": row["hop_limit"], "source": row["source"],
             "requested_by": row["requested_by"], "error": row["error"],
             "done": row["done_ts_iso"], "towards": towards, "back": back_path,
@@ -3025,7 +3026,7 @@ def broadcast():
 
         q_filter = "" if all_view else "AND COALESCE(channel, 0) = ?"
         cur.execute(f"""
-        SELECT id, created_ts_iso, text, channel, channel_name
+        SELECT id, created_ts, created_ts_iso, text, channel, channel_name
         FROM outbox
         WHERE status='queued'
           AND (to_id IS NULL OR lower(to_id) IN ('^all','!ffffffff','ffffffff','0xffffffff'))
@@ -3345,6 +3346,7 @@ def map_data():
             "snr": r["last_snr"],
             "last_seen": r["last_seen_iso"] or "",
             "pos_time": r["last_pos_iso"] or "",
+            "pos_ts": r["last_pos_ts"],
             "last_seen_ts": last_seen_ts,
             "age_sec": age_sec,
             "recent": recent,
@@ -3398,9 +3400,10 @@ def services_view():
             """, (day_start,))
             for r in cur.fetchall():
                 stats[r["service"]] = {"today": int(r["today"] or 0),
-                                       "last": iso_utc(int(r["last_ts"])) if r["last_ts"] else ""}
+                                       "last": iso_utc(int(r["last_ts"])) if r["last_ts"] else "",
+                                       "last_ts": int(r["last_ts"]) if r["last_ts"] else None}
             sql = """
-                SELECT l.ts_iso, l.service, l.from_id, l.query, l.status, l.note,
+                SELECT l.ts, l.ts_iso, l.service, l.from_id, l.query, l.status, l.note,
                        n.long_name AS from_long, n.short_name AS from_short
                 FROM service_log l LEFT JOIN nodes n ON n.node_id = l.from_id
             """
@@ -3416,7 +3419,8 @@ def services_view():
         services.append(dict(x, switch=service_switch_on(DB_CONN, x["name"]),
                              answers=master and service_switch_on(DB_CONN, x["name"]),
                              today=stats.get(x["name"], {}).get("today", 0),
-                             last=stats.get(x["name"], {}).get("last", "")))
+                             last=stats.get(x["name"], {}).get("last", ""),
+                             last_ts=stats.get(x["name"], {}).get("last_ts")))
     return render_template(
         "services.html", host=HOST, extra_head="",
         master=master, delay=delay, services=services,
@@ -3474,12 +3478,15 @@ def debug_data():
     n = max(1, min(n, DEBUG_BUFFER_MAX))
     entries = debug_filtered(n, typ, node_id)
     lines = []
+    out = []
     for e in entries:
         try:
             lines.append(f"[{iso_utc(e.ts)}] {e.typ:8s} from={e.from_id}\n{e.text}\n")
+            out.append({"ts": e.ts, "typ": e.typ, "from": e.from_id, "text": e.text})
         except Exception:
             lines.append(str(e))
-    return jsonify({"text": "\n".join(lines) if lines else "(no entries)"})
+    # "entries" lets the page show the times in UTC or local time
+    return jsonify({"text": "\n".join(lines) if lines else "(no entries)", "entries": out})
 
 
 @app.post("/debug/clear")

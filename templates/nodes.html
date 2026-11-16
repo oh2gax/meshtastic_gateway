@@ -42,7 +42,7 @@
           data-snr="{{ r['last_snr'] if r['last_snr'] is not none else '' }}"
           data-hops="{{ r['last_hops'] if r['last_hops'] is not none else '' }}"
           data-dist="{{ r['distance_km'] if r['distance_km'] is not none else '' }}">
-        <td class="mono small text-nowrap">{{ r["last_seen_iso"]|replace(" UTC", "") }}</td>
+        <td class="mono small text-nowrap">{{ ui.ts(r["last_seen_ts"], r["last_seen_iso"]) }}</td>
         <td class="node-id">{{ r["node_id"] }}</td>
         <td class="fw-medium">{{ node_display(r["long_name"], r["short_name"], r["node_id"]) }}</td>
         <td class="mono small dim">{{ r["hw_model"] or "" }}</td>

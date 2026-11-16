@@ -65,7 +65,15 @@
     try {
       const res = await fetch("/debug/data?" + params().toString(), {cache: "no-store"});
       const data = await res.json();
-      document.getElementById("debugBox").textContent = data.text;
+      if (Array.isArray(data.entries)) {
+        // show the times in the chosen zone (UTC or local)
+        const tz = mgTzLabel();
+        document.getElementById("debugBox").textContent = data.entries.length
+          ? data.entries.map(e => `[${mgFmtTs(e.ts)} ${tz}] ${String(e.typ).padEnd(8)} from=${e.from}\n${e.text}\n`).join("\n")
+          : "(no entries)";
+      } else {
+        document.getElementById("debugBox").textContent = data.text;
+      }
     } catch (e) {
       document.getElementById("debugBox").textContent = "Fetch error: " + e;
     }
@@ -115,6 +123,7 @@
   }
   document.getElementById("rateSel").addEventListener("change", setTimer);
 
+  window.addEventListener("mg-tz-change", refreshDebug);
   setTimer();
   refreshDebug();
 </script>

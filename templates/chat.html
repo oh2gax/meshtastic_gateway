@@ -43,7 +43,7 @@
           {% else %}
             <span class="who">Me</span>
           {% endif %}
-          <span>{{ m["ts_iso"] }}</span>
+          <span>{{ ui.ts(m["ts"], m["ts_iso"]) }}</span>
           {% if m["direction"] == "in" and m["hops"] is not none %}<span>&middot; Hops {{ m["hops"] }}</span>{% endif %}
           {% if m["direction"] == "out" %}{{ ui.ack_badge(m["ack_status"], m["ack_hops"], m["ack_rssi"], m["ack_snr"]) }}{% endif %}
         </div>

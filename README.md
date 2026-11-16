@@ -65,9 +65,9 @@ The gateway performs lightweight schema migrations automatically on startup, so 
 - **Services** — enable/disable the combined METAR / TAF / Solar service, configure the reply delay, and see the latest service-traffic log.
 - **Send** — compose a direct message or a broadcast. When opened via a *Reply* link the reply target is always pre-selected, even if that node hasn't been heard recently.
 
-There is also a global **Theme** toggle in the navbar (light / dark), a **New message** indicator that shows in the top right when there are unread direct messages, and a **✨ What's new** button that opens short notes about each version (from `doc/whats_new.md`) and an About tab. A red dot on the button means there are notes you haven't opened yet; the version (`v.DDMMYYYY`) is also shown in the footer. The technical history is in `CHANGELOG.md`.
+There is also a global **Theme** menu in the navbar (Auto / Light / Dark; Auto follows the device and is the default), a **UTC / Local** time switch, a **New message** indicator that shows in the top right when there are unread direct messages, and a **✨ What's new** button that opens short notes about each version (from `doc/whats_new.md`) and an About tab. A red dot on the button means there are notes you haven't opened yet; the version (`v.DDMMYYYY`) is also shown in the footer. The technical history is in `CHANGELOG.md`.
 
-All timestamps in the UI are in **UTC**. The `UTC` suffix is omitted from the displayed strings for compactness, so a row that reads `2026-05-01 11:44:50` is `2026-05-01 11:44:50 UTC` under the hood.
+All timestamps are stored in **UTC** and shown in UTC by default. The **UTC / Local** switch in the top bar (on a phone: *Time* in the ☰ menu) shows them in the local time of the computer or phone you are viewing on instead; pointing at a time shows it in the other zone, and the footer tells which one is in use. The choice is remembered per browser.
 
 See `Meshtastic_Gateway.pdf` for a UI overview and screenshots.
 
@@ -298,9 +298,14 @@ Service-command messages (e.g. `wx EFHK`, `taf EFHK`, `cmd solar`, `cmd wspr`) a
 
 Use the web UI's *Send* page for one-off messages, or the *Chat* page (via the navbar button or any per-row *Chat* link) for an ongoing thread with a specific node. ACK status appears in the Outbox column and inline next to each outgoing chat line.
 
-### Theme (dark / light)
+### Theme (Auto / Light / Dark)
 
-Use the **Theme** button in the navbar to switch between light and dark UI modes. The choice is remembered across sessions and is also applied to the map tiles.
+The **Theme** button in the navbar opens a small menu:
+
+- **Auto** (the default) follows the light or dark setting of the computer or phone you are using, and changes with it.
+- **Light** and **Dark** keep that theme regardless of the device.
+
+The choice is remembered in the browser. The map follows the theme (OpenStreetMap tiles in light, CARTO Dark Matter in dark).
 
 ### New message notifications
 

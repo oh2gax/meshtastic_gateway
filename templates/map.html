@@ -124,8 +124,8 @@
         <div><b>${esc(n.name)}</b> <span class="mono" style="color:#888">${esc(n.node_id)}</span></div>
         <div class="mono" style="font-size:12px; color:#888">${esc(n.hw)}</div>
         <hr style="margin:6px 0">
-        <div><b>Last seen:</b> ${esc(n.last_seen)}</div>
-        <div><b>Pos time:</b> ${esc(n.pos_time)}</div>
+        <div><b>Last seen:</b> ${esc(n.last_seen_ts ? mgFmtTs(n.last_seen_ts) : n.last_seen)}</div>
+        <div><b>Pos time:</b> ${esc(n.pos_ts ? mgFmtTs(n.pos_ts) : n.pos_time)}</div>
         <div><b>RSSI/SNR:</b> ${esc(n.rssi)} / ${esc(n.snr)}</div>
         <div><b>Lat/Lon:</b> ${Number(n.lat).toFixed(5)}, ${Number(n.lon).toFixed(5)}</div>
         <div><b>Hops:</b> ${hopsStr}</div>
@@ -365,6 +365,9 @@
       <div class="mt-1"><a href="/traceroute?id=${TRACE_ID}">Details</a></div>`;
     el.style.display = "";
   }
+
+  // Redraw the list and popups when UTC / local time is switched.
+  window.addEventListener("mg-tz-change", () => refreshMarkersAndList());
 
   setTimer();
   refreshMarkersAndList();

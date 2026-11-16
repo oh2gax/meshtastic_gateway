@@ -17,13 +17,15 @@ version shown in the navigation bar.
 - **One log for all services** — the latest 100 requests in a table with the asking node's name, coloured results and a filter per service.
 - **Hops of the ACK** — when a direct message gets its **Y**, the Outbox and Chat now show how many hops the acknowledgement travelled back (*Y 2 hops*); pointing at it shows the signal of its last hop. Messages sent before this version, and nodes with old firmware, show just *Y*.
 - **Distance in Active Nodes** — a new *Distance* column shows how far each node with a known position is from the gateway. Click a column heading (Last seen, Name, RSSI, SNR, Hops, Distance) to sort the list, click again to reverse it; nodes without a value always come last. The order is remembered, also through the auto-refresh.
+- **UTC or local time** — the new *UTC / Local* switch in the top bar (on a phone: *Time* in the ☰ menu) shows every time on every page either in UTC or in the local time of your computer or phone, for example Finnish time. Pointing at a time shows it in the other zone, and the footer tells which one is in use. The choice is remembered in the browser; UTC stays the default.
+- **Theme: Auto, Light or Dark** — the theme button opens a small menu: *Auto* (the default) follows the light or dark setting of your computer or phone and changes with it, *Light* and *Dark* stay fixed. Your choice is remembered.
 - **From Active Nodes to the map** — a map button on each row of Active Nodes opens the Map zoomed to that node, with its details open and the node highlighted in the list. It is grey for a node whose position is not known.
 - **Popups stay open** — a node's details on the map no longer close by themselves when the map refreshes every few seconds.
 - **Sorting on the map** — the node list beside the map can be sorted by last seen, distance, name or hops, with ↑↓ to reverse; it is remembered too.
 - **All channels on the Broadcast page** — the Broadcast page now opens with *All channels*: the messages of every channel together, each with a coloured tag that tells its channel (*0 · EdgeFastLow*, *1 · Radio* …). Choosing one channel shows only that channel, as before. When you write from the All view, a list next to the message box chooses the channel to send on.
 - **Hops on the Broadcast page** — received broadcasts now show how many hops they travelled (*Hops 2*), like the Inbox and Chat.
 - **Y stays Y** — a relay heard passing the message on after the real acknowledgement no longer changes a **Y** back to **S**.
-- **User guide 1.7** — new Traceroute section, the new Services page, the hops of the ACK, and `cmd trace` and `cmd help` in the quick reference.
+- **User guide 1.8** — new Traceroute section, the new Services page, the hops of the ACK, and `cmd trace` and `cmd help` in the quick reference.
 
 ## v.15112026 — A fresh look, WSPR propagation on the mesh, and easy updates on the Pi
 

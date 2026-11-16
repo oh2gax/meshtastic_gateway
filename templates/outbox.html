@@ -24,7 +24,7 @@
     <tbody>
     {% for r in rows %}
       <tr>
-        <td class="mono small text-nowrap">{{ r["created_ts_iso"]|replace(" UTC", "") }}</td>
+        <td class="mono small text-nowrap">{{ ui.ts(r["created_ts"], r["created_ts_iso"]) }}</td>
         <td>
           {% if r["to_id"] %}
             <div>{{ node_display(r["to_long"], r["to_short"], r["to_id"]) }}</div>

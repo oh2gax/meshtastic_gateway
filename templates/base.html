@@ -5,17 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Meshtastic Gateway</title>
   <script>
-    // Apply saved theme BEFORE stylesheets to avoid a flash of the wrong theme.
+    // Theme: localStorage['mg-theme'] = 'auto' (default) | 'light' | 'dark'.
+    // Auto follows the device's light/dark setting. Applied BEFORE the
+    // stylesheets to avoid a flash of the wrong theme.
     (function () {
-      try {
-        var t = localStorage.getItem('mg-theme');
-        if (!t) {
+      window.mgThemeChoice = function () {
+        try { var t = localStorage.getItem('mg-theme'); return (t === 'light' || t === 'dark') ? t : 'auto'; }
+        catch (e) { return 'auto'; }
+      };
+      window.mgApplyTheme = function () {
+        var c = mgThemeChoice(), t = c;
+        if (c === 'auto') {
           t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
         }
         document.documentElement.setAttribute('data-bs-theme', t);
-      } catch (e) {
-        document.documentElement.setAttribute('data-bs-theme', 'light');
-      }
+      };
+      mgApplyTheme();
+    })();
+    // UTC / local time (localStorage['mg-tz'] = 'utc' | 'local'; UTC by default).
+    // Defined here so every page script can use mgFmtTs() right away.
+    (function () {
+      function pad(n) { return (n < 10 ? '0' : '') + n; }
+      window.mgTzMode = function () {
+        try { return localStorage.getItem('mg-tz') === 'local' ? 'local' : 'utc'; } catch (e) { return 'utc'; }
+      };
+      window.mgFmtTs = function (ts, mode) {
+        if (ts === null || ts === undefined || ts === '') return '';
+        var d = new Date(Number(ts) * 1000);
+        if (isNaN(d.getTime())) return '';
+        if ((mode || mgTzMode()) === 'local') {
+          return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' +
+                 pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+        }
+        return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) + ' ' +
+               pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds());
+      };
+      window.mgUtcOffset = function () {   // e.g. "UTC+2"
+        var m = -new Date().getTimezoneOffset(), s = m >= 0 ? '+' : '-';
+        m = Math.abs(m);
+        return 'UTC' + s + Math.floor(m / 60) + (m % 60 ? ':' + pad(m % 60) : '');
+      };
+      window.mgTzLabel = function () { return mgTzMode() === 'local' ? 'local' : 'UTC'; };
     })();
   </script>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -53,11 +83,23 @@
               data-version="{{ app_version }}" title="What's new{% if app_version %} in {{ app_version }}{% endif %}">
         <i class="bi bi-stars"></i><span class="wn-dot" id="whatsNewDot" style="display:none;"></span>
       </button>
-      <button type="button" class="btn btn-outline-secondary btn-sm mg-icon-btn" id="themeToggle" title="Toggle dark/light theme">
-        <i class="bi bi-moon-stars" id="themeIcon"></i>
+      <button type="button" class="btn btn-outline-secondary btn-sm mg-tz-btn mg-tz-toggle d-none d-xl-inline-flex" id="tzToggle" title="Times in UTC – click for local time">
+        <i class="bi bi-clock"></i> <span class="mg-tz-label">UTC</span>
       </button>
+      <div class="dropdown">
+        <button type="button" class="btn btn-outline-secondary btn-sm mg-icon-btn" id="themeToggle"
+                data-bs-toggle="dropdown" aria-expanded="false" title="Theme: Auto">
+          <i class="bi bi-circle-half" id="themeIcon"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end mg-theme-menu">
+          <li><h6 class="dropdown-header">Theme</h6></li>
+          <li><button type="button" class="dropdown-item mg-theme-opt" data-theme="auto"><i class="bi bi-circle-half"></i> Auto <small class="text-body-secondary">(as the device)</small></button></li>
+          <li><button type="button" class="dropdown-item mg-theme-opt" data-theme="light"><i class="bi bi-sun"></i> Light</button></li>
+          <li><button type="button" class="dropdown-item mg-theme-opt" data-theme="dark"><i class="bi bi-moon-stars"></i> Dark</button></li>
+        </ul>
+      </div>
       <a class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1" href="{{ url_for('send_form') }}">
-        <i class="bi bi-pencil-square"></i><span class="d-none d-sm-inline">Send</span>
+        <i class="bi bi-pencil-square"></i><span class="d-none d-sm-inline mg-send-label">Send</span>
       </a>
       <button class="navbar-toggler btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#mgNav"
               aria-controls="mgNav" aria-expanded="false" aria-label="Menu">
@@ -76,6 +118,11 @@
             </a>
           </li>
         {% endfor %}
+        <li class="nav-item d-xl-none">
+          <a class="nav-link mg-tz-toggle" href="#" title="Switch between UTC and local time">
+            <i class="bi bi-clock"></i>Time: <span class="mg-tz-label">UTC</span>
+          </a>
+        </li>
       </ul>
     </div>
   </div>
@@ -90,7 +137,7 @@
     <span><i class="bi bi-router"></i> TCP radio: <span class="mono">{{ host }}</span></span>
     <span>
       <a href="#" class="link-secondary text-decoration-none" id="footerWhatsNew"><i class="bi bi-stars"></i> Meshtastic Gateway {{ app_version }}</a>
-      &middot; All times UTC
+      &middot; <span id="tzNote">All times UTC</span>
     </span>
   </div>
 </footer>
@@ -226,23 +273,73 @@
   })();
 </script>
 <script>
-  // Theme toggle (persisted in localStorage['mg-theme']).
+  // Theme menu: Auto (default, follows the device) / Light / Dark.
   (function () {
     var btn = document.getElementById('themeToggle');
     var icon = document.getElementById('themeIcon');
     if (!btn) return;
-    function setLabel() {
-      var t = document.documentElement.getAttribute('data-bs-theme') || 'light';
-      if (icon) icon.className = 'bi ' + (t === 'dark' ? 'bi-sun' : 'bi-moon-stars');
-      btn.title = (t === 'dark') ? 'Switch to light mode' : 'Switch to dark mode';
+    var ICONS = { auto: 'bi-circle-half', light: 'bi-sun', dark: 'bi-moon-stars' };
+    var NAMES = { auto: 'Auto (as the device)', light: 'Light', dark: 'Dark' };
+    function show() {
+      var c = mgThemeChoice();
+      if (icon) icon.className = 'bi ' + ICONS[c];
+      btn.title = 'Theme: ' + NAMES[c];
+      document.querySelectorAll('.mg-theme-opt').forEach(function (o) {
+        o.classList.toggle('active', o.getAttribute('data-theme') === c);
+      });
     }
-    setLabel();
-    btn.addEventListener('click', function () {
-      var cur = document.documentElement.getAttribute('data-bs-theme') || 'light';
-      var next = (cur === 'dark') ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-bs-theme', next);
-      try { localStorage.setItem('mg-theme', next); } catch (e) {}
-      setLabel();
+    document.querySelectorAll('.mg-theme-opt').forEach(function (o) {
+      o.addEventListener('click', function () {
+        var c = o.getAttribute('data-theme');
+        try {
+          if (c === 'auto') localStorage.removeItem('mg-theme');
+          else localStorage.setItem('mg-theme', c);
+        } catch (e) {}
+        mgApplyTheme();
+        show();
+      });
+    });
+    // In Auto, follow the device when it switches between light and dark.
+    if (window.matchMedia) {
+      var mq = window.matchMedia('(prefers-color-scheme: dark)');
+      var onChange = function () { if (mgThemeChoice() === 'auto') mgApplyTheme(); };
+      if (mq.addEventListener) mq.addEventListener('change', onChange);
+      else if (mq.addListener) mq.addListener(onChange);
+    }
+    show();
+  })();
+</script>
+<script>
+  // Show every timestamp in the chosen zone, and the UTC / Local switch.
+  (function () {
+    function apply() {
+      var mode = mgTzMode(), other = mode === 'local' ? 'utc' : 'local';
+      document.querySelectorAll('time.mg-ts[data-ts]').forEach(function (el) {
+        var t = el.getAttribute('data-ts');
+        if (!t) return;
+        el.textContent = mgFmtTs(t, mode);
+        el.title = (other === 'utc' ? 'UTC ' : 'Local (' + mgUtcOffset() + ') ') + mgFmtTs(t, other);
+      });
+      document.querySelectorAll('option[data-ts]').forEach(function (o) {
+        var t = o.getAttribute('data-ts');
+        o.textContent = o.getAttribute('data-label') + (t ? ' (' + mgFmtTs(t, mode) + ')' : '');
+      });
+      var btn = document.getElementById('tzToggle');
+      var note = document.getElementById('tzNote');
+      document.querySelectorAll('.mg-tz-label').forEach(function (l) { l.textContent = mode === 'local' ? 'Local' : 'UTC'; });
+      if (btn) btn.title = mode === 'local' ? ('Times in local time (' + mgUtcOffset() + ') – click for UTC')
+                                            : 'Times in UTC – click for local time';
+      if (note) note.textContent = mode === 'local' ? ('All times local (' + mgUtcOffset() + ')') : 'All times UTC';
+    }
+    apply();
+    document.querySelectorAll('.mg-tz-toggle').forEach(function (b) {
+      b.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        var next = mgTzMode() === 'local' ? 'utc' : 'local';
+        try { localStorage.setItem('mg-tz', next); } catch (e) {}
+        apply();
+        window.dispatchEvent(new Event('mg-tz-change'));
+      });
     });
   })();
 </script>

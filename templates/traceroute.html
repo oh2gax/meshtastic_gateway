@@ -49,7 +49,7 @@
           {% if sel.status == 'sent' and sel.seconds_left is not none %}<span class="small text-body-secondary" id="trLeft" data-left="{{ sel.seconds_left }}">{{ sel.seconds_left }} s left</span>{% endif %}
         </div>
         <div class="meta mb-3">
-          {{ sel.created }} &middot; hop limit {{ sel.hop_limit }}
+          {{ ui.ts(sel.created_ts, sel.created) }} &middot; hop limit {{ sel.hop_limit }}
           {% if sel.source == 'cmd' %} &middot; asked with <code>cmd trace</code> by {{ sel.requested_by }}{% endif %}
         </div>
 
@@ -96,7 +96,7 @@
     <tbody>
     {% for v in history %}
       <tr {% if sel and v.id == sel.id %}class="table-active"{% endif %}>
-        <td class="mono small text-nowrap">{{ v.created|replace(" UTC", "") }}</td>
+        <td class="mono small text-nowrap">{{ ui.ts(v.created_ts, v.created) }}</td>
         <td>{{ v.target.name }} <span class="node-id">{{ v.target.id }}</span></td>
         <td class="mono">{{ v.hop_limit }}</td>
         <td class="mono">{% if v.hops_out is not none %}{{ v.hops_out }} / {{ v.hops_back if v.hops_back is not none else '—' }}{% else %}<span class="dim">—</span>{% endif %}</td>

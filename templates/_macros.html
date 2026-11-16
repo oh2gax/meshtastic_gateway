@@ -57,3 +57,8 @@
     {%- endfor %}
   </div>
 {%- endmacro %}
+
+{# A timestamp: rendered in UTC; base.html switches it to local time when chosen. #}
+{% macro ts(epoch, fallback="") -%}
+  <time class="mg-ts" data-ts="{{ epoch if epoch is not none else '' }}">{{ (fallback or '')|replace(' UTC', '') }}</time>
+{%- endmacro %}

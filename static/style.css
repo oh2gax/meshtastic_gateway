@@ -69,6 +69,13 @@ main { flex: 1 0 auto; }
   .mg-navbar .nav-link .bi { display: none; }
   .mg-navbar .nav-link { padding: .4rem .55rem !important; }
 }
+/* Between 1200 and 1440 px also tighten the menu and drop the labels of Send
+   and the clock icon of the time switch. */
+@media (min-width: 1200px) and (max-width: 1439.98px) {
+  .mg-navbar .nav-link { padding: .4rem .42rem !important; }
+  .mg-navbar .mg-send-label { display: none !important; }
+  .mg-tz-btn .bi { display: none; }
+}
 /* A little more room on wide screens. */
 @media (min-width: 1400px) { .container-xl { max-width: 1440px; } }
 .mg-navbar .nav-link.active { opacity: 1; background: var(--mg-accent-soft); color: var(--mg-accent); font-weight: 600; }
@@ -249,3 +256,4 @@ th.sortable.sort-asc::after { content: "\F235"; opacity: 1; color: var(--mg-acce
 th.sortable.sort-desc::after { content: "\F229"; opacity: 1; color: var(--mg-accent); }
 th.sortable.sort-asc, th.sortable.sort-desc { color: var(--mg-accent) !important; }
 .nodeitem.focused { border-color: var(--mg-accent); background: var(--mg-accent-soft); }
+.mg-tz-btn { height: 34px; border-radius: 9px; display: inline-flex; align-items: center; gap: .3rem; padding: 0 .55rem; font-size: .8rem; font-weight: 600; }

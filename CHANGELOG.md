@@ -55,7 +55,17 @@ User-facing notes are in `doc/whats_new.md` (shown in the What's new window).
   per page load); a note when the node has no position in the window. `focus` must match `![0-9a-f]{8}`.
 - **Map popups survive the refresh** — the open popup is reopened after the 5-second marker redraw
   (clearing the marker layer used to close it).
-- User guide 1.7 with Traceroute, the new Services page, the ACK hops and broadcast hops; demo data and screenshots.
+- **UTC / local time switch** — timestamps are rendered as `<time class="mg-ts" data-ts=epoch>` (macro
+  `ui.ts`) with the UTC text as fallback; `base.html` converts them to the browser's local time when
+  `localStorage['mg-tz'] == 'local'` (default UTC), puts the other zone in the tooltip and updates the footer.
+  `mgFmtTs()` / `mgTzMode()` are defined in `<head>` for page scripts; the Map (popups) and Debug (now
+  built from `/debug/data` `entries`) redraw on the `mg-tz-change` event. Epoch values added where they
+  were missing (queued broadcasts, map `pos_ts`, service log `ts`, service `last_ts`, traceroute
+  `created_ts`). Switch in the top bar from 1200 px, in the ☰ menu below; navbar tightened at 1200–1440 px.
+- **Theme Auto / Light / Dark** — theme button is a dropdown; `localStorage['mg-theme']` = `light` |
+  `dark`, missing = Auto (default), which follows `prefers-color-scheme` and its `change` event live.
+  `mgThemeChoice()` / `mgApplyTheme()` in `<head>`; a value saved by the old toggle is kept.
+- User guide 1.8 with Traceroute, the new Services page, the ACK hops and broadcast hops; demo data and screenshots.
 
 ## [2026-11-15]
 

@@ -9,17 +9,18 @@
   <div class="toolbar">
     <form method="get" action="{{ url_for('broadcast') }}" class="d-flex align-items-center gap-1 m-0">
       <span class="toolbar-label">Channel</span>
-      <select class="form-select form-select-sm" name="channel" onchange="this.form.submit()" style="min-width: 160px;">
+      <select class="form-select form-select-sm" name="channel" onchange="this.form.submit()" style="min-width: 170px;">
+        <option value="all" {% if all_view %}selected{% endif %}>All channels</option>
         {% for c in channels %}
-          <option value="{{ c.index }}" {% if c.index == selected_channel %}selected{% endif %}>{{ c.label }}</option>
+          <option value="{{ c.index }}" {% if not all_view and c.index == selected_channel %}selected{% endif %}>{{ c.label }}</option>
         {% endfor %}
       </select>
       <input type="hidden" name="limit" value="{{ limit }}">
     </form>
     {{ ui.seg([
-      ('50',  url_for('broadcast', limit=50,  channel=selected_channel), limit == 50),
-      ('100', url_for('broadcast', limit=100, channel=selected_channel), limit == 100),
-      ('500', url_for('broadcast', limit=500, channel=selected_channel), limit == 500),
+      ('50',  url_for('broadcast', limit=50,  channel=channel_param), limit == 50),
+      ('100', url_for('broadcast', limit=100, channel=channel_param), limit == 100),
+      ('500', url_for('broadcast', limit=500, channel=channel_param), limit == 500),
     ]) }}
     {{ ui.refresh_select('broadcastRefreshRate', 'mg-broadcast-refresh', '0') }}
   </div>
@@ -27,10 +28,10 @@
 
 {% if queued %}
   <div class="alert alert-warning py-2">
-    <b><i class="bi bi-hourglass-split"></i> Queued broadcast messages on {{ selected_label }}:</b>
+    <b><i class="bi bi-hourglass-split"></i> Queued broadcast messages{% if not all_view %} on {{ selected_label }}{% endif %}:</b>
     <ul class="mb-0">
       {% for q in queued %}
-        <li class="mono small">#{{ q["id"] }} · {{ q["created_ts_iso"] }} · {{ q["text"] }}</li>
+        <li class="mono small">#{{ q["id"] }} · {{ q["created_ts_iso"] }}{% if all_view %} · {{ q["ch_label"] }}{% endif %} · {{ q["text"] }}</li>
       {% endfor %}
     </ul>
   </div>
@@ -41,6 +42,7 @@
     {% for m in msgs %}
       <div class="bubble {% if m['direction'] != 'in' %}out{% endif %}">
         <div class="meta mono">
+          {% if all_view %}<span class="ch-tag ch-{{ m['ch_index'] % 8 }}" title="Channel">{{ m["ch_label"] }}</span>{% endif %}
           {% if m["direction"] == "in" %}
             <span class="who">{{ node_display(m["from_long"], m["from_short"], m["from_id"]) }}</span>
           {% else %}
@@ -55,14 +57,24 @@
         <div>{{ m["text"] }}</div>
       </div>
     {% else %}
-      <div class="empty-state"><i class="bi bi-megaphone"></i>No broadcast messages on this channel yet.</div>
+      <div class="empty-state"><i class="bi bi-megaphone"></i>No broadcast messages {% if all_view %}yet{% else %}on this channel yet{% endif %}.</div>
     {% endfor %}
   </div>
   <form method="post" action="{{ url_for('broadcast_send') }}" class="composer m-0">
-    <input type="hidden" name="channel" value="{{ selected_channel }}">
+    <input type="hidden" name="back" value="{{ 'all' if all_view else selected_channel }}">
+    {% if all_view %}
+      <div style="min-width: 170px;">
+        <select class="form-select" name="channel" title="Channel to send on">
+          {% for c in channels %}<option value="{{ c.index }}" {% if loop.first %}selected{% endif %}>{{ c.label }}</option>{% endfor %}
+        </select>
+        <div class="char-count">send on</div>
+      </div>
+    {% else %}
+      <input type="hidden" name="channel" value="{{ selected_channel }}">
+    {% endif %}
     <div class="flex-grow-1">
       <textarea class="form-control" name="text" rows="2" maxlength="240" required
-                placeholder="Broadcast on {{ selected_label }}" data-counter="bcCount"></textarea>
+                placeholder="Broadcast{% if not all_view %} on {{ selected_label }}{% else %} on the chosen channel{% endif %}" data-counter="bcCount"></textarea>
       <div class="char-count" id="bcCount"></div>
     </div>
     <button class="btn btn-primary mb-3" type="submit"><i class="bi bi-megaphone"></i> Queue broadcast</button>

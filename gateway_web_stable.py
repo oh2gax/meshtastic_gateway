@@ -2956,7 +2956,10 @@ def outbox_delete(out_id: int):
 
 @app.get("/broadcast")
 def broadcast():
-    limit = int(request.args.get("limit", "50"))
+    try:
+        limit = int(request.args.get("limit", "50"))
+    except Exception:
+        limit = 50
     limit = 50 if limit not in (50, 100, 500) else limit
 
     # Mark "broadcast page seen now" so the navbar Broadcast button stops
@@ -2966,24 +2969,38 @@ def broadcast():
     except Exception:
         pass
 
-    # Channel selector: default to primary (index 0) on first visit.
-    try:
-        selected_channel = int(request.args.get("channel", "0"))
-    except Exception:
-        selected_channel = 0
-
+    # Channel selector: "all" (the default) shows every channel, each message
+    # tagged with its channel; a number shows one channel only.
     channels = build_channel_options(DB_CONN, gateway.my_id)
-    # If the current selection is not in the valid list, fall back to the first option.
-    valid_idx = {c["index"] for c in channels}
-    if selected_channel not in valid_idx:
-        selected_channel = channels[0]["index"]
-    selected_label = next((c["label"] for c in channels if c["index"] == selected_channel),
-                          _channel_label(selected_channel, "", ""))
+    label_by_idx = {c["index"]: c["label"] for c in channels}
+    raw = (request.args.get("channel", "all") or "all").strip().lower()
+    all_view = raw == "all"
+    selected_channel: Optional[int] = None
+    if not all_view:
+        try:
+            selected_channel = int(raw)
+        except Exception:
+            all_view = True
+        if selected_channel is not None and selected_channel not in label_by_idx:
+            selected_channel = channels[0]["index"]
+    selected_label = "All channels" if all_view else label_by_idx.get(
+        selected_channel, _channel_label(selected_channel or 0, "", ""))
 
+    def ch_label(idx: Any, stored_name: Optional[str]) -> str:
+        try:
+            i = int(idx) if idx is not None else 0
+        except Exception:
+            i = 0
+        if i in label_by_idx:
+            return label_by_idx[i]
+        return _channel_label(i, stored_name or "", "")
+
+    ch_filter = "" if all_view else "AND COALESCE(m.channel, 0) = ?"
+    params: List[Any] = [] if all_view else [selected_channel]
     DB_CONN.row_factory = sqlite3.Row
     with DB_LOCK:
         cur = DB_CONN.cursor()
-        cur.execute("""
+        cur.execute(f"""
         SELECT m.id, m.ts, m.ts_iso, m.direction, m.from_id, m.to_id, m.text, m.rx_rssi, m.rx_snr,
                m.channel, m.channel_name,
                CASE
@@ -3000,28 +3017,41 @@ def broadcast():
                 OR
                 (m.to_id IS NULL AND (m.to_num IS NULL OR m.to_num = 4294967295))
               )
-          AND COALESCE(m.channel, 0) = ?
+          {ch_filter}
         ORDER BY m.ts DESC, m.id DESC
         LIMIT ?
-        """, (selected_channel, limit))
-        msgs = cur.fetchall()
-        msgs = list(reversed(msgs))
+        """, (*params, limit))
+        rows = cur.fetchall()
 
-        cur.execute("""
+        q_filter = "" if all_view else "AND COALESCE(channel, 0) = ?"
+        cur.execute(f"""
         SELECT id, created_ts_iso, text, channel, channel_name
         FROM outbox
         WHERE status='queued'
           AND (to_id IS NULL OR lower(to_id) IN ('^all','!ffffffff','ffffffff','0xffffffff'))
-          AND COALESCE(channel, 0) = ?
+          {q_filter}
         ORDER BY created_ts ASC
         LIMIT 10
-        """, (selected_channel,))
-        queued = cur.fetchall()
+        """, tuple(params))
+        qrows = cur.fetchall()
+
+    msgs = []
+    for r in reversed(rows):
+        d = dict(r)
+        d["ch_index"] = int(d["channel"]) if d.get("channel") is not None else 0
+        d["ch_label"] = ch_label(d.get("channel"), d.get("channel_name"))
+        msgs.append(d)
+    queued = []
+    for r in qrows:
+        d = dict(r)
+        d["ch_label"] = ch_label(d.get("channel"), d.get("channel_name"))
+        queued.append(d)
 
     return render_template("broadcast.html", host=HOST, extra_head="",
                            msgs=msgs, queued=queued, limit=limit,
-                           channels=channels,
+                           channels=channels, all_view=all_view,
                            selected_channel=selected_channel,
+                           channel_param=("all" if all_view else selected_channel),
                            selected_label=selected_label)
 
 @app.post("/broadcast/send")
@@ -3031,11 +3061,13 @@ def broadcast_send():
         ch = int(request.form.get("channel", "0"))
     except Exception:
         ch = 0
+    back = (request.form.get("back", "") or "").strip().lower()
+    back_channel = "all" if back == "all" else ch
     if not text:
-        return redirect(url_for("broadcast", channel=ch))
+        return redirect(url_for("broadcast", channel=back_channel))
     ch_name = channel_name_for(DB_CONN, gateway.my_id, ch)
     queue_outbox(DB_CONN, None, ch, text, channel_name=ch_name)
-    return redirect(url_for("broadcast", channel=ch))
+    return redirect(url_for("broadcast", channel=back_channel))
 
 @app.get("/send")
 def send_form():

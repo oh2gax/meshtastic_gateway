@@ -234,3 +234,9 @@ pre.debugbox, .logbox {
 .svc-card .form-switch .form-check-input { width: 2.4em; height: 1.25em; cursor: pointer; }
 .ack-wrap { display: inline-flex; align-items: center; gap: .3rem; }
 .ack-hops { font-size: .75rem; color: var(--mg-muted); font-family: var(--mg-mono); white-space: nowrap; }
+
+/* Channel tags in the Broadcast "All channels" view */
+.ch-tag { display: inline-block; padding: 0 .45rem; border-radius: 999px; font-size: .72rem; font-weight: 600;
+          font-family: var(--mg-font); color: #fff; line-height: 1.5; }
+.ch-0 { background: #4f46e5; } .ch-1 { background: #0d9488; } .ch-2 { background: #c2410c; } .ch-3 { background: #7c3aed; }
+.ch-4 { background: #0369a1; } .ch-5 { background: #be185d; } .ch-6 { background: #4d7c0f; } .ch-7 { background: #57534e; }

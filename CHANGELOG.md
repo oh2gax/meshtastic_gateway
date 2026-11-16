@@ -42,7 +42,10 @@ User-facing notes are in `doc/whats_new.md` (shown in the What's new window).
 - `update_outbox_ack_by_packet` never downgrades `acked` (a late implicit ACK from a relay used to turn
   Y back into S).
 - Broadcast page shows the hops of received broadcasts (`hop_start - hop_limit`, as in Inbox and Chat).
-- User guide 1.4 with Traceroute, the new Services page, the ACK hops and broadcast hops; demo data and screenshots.
+- **Broadcast "All channels"** — `/broadcast?channel=all` (the default) lists every channel; each message
+  gets a channel tag (current channel map label, falling back to the stored `channel_name`, colour by
+  index). Sending from the All view uses a channel picker; `back` keeps the view after sending.
+- User guide 1.5 with Traceroute, the new Services page, the ACK hops and broadcast hops; demo data and screenshots.
 
 ## [2026-11-15]
 

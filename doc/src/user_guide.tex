@@ -43,7 +43,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\itshape Meshtastic Gateway --- how to read and use the web page}
-\fancyhead[R]{\small\itshape User guide, version 1.4 --- November 2026}
+\fancyhead[R]{\small\itshape User guide, version 1.5 --- November 2026}
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0.3pt}
 \hypersetup{pdftitle={Meshtastic Gateway - User guide},pdfauthor={Otso Laakso, OH2GAX}}
@@ -69,7 +69,7 @@
 \begin{document}
 \thispagestyle{plain}
 \begin{center}
-{\small Meshtastic Gateway project \quad$\cdot$\quad User guide, version 1.4 \quad$\cdot$\quad 16 November 2026}\par\vspace{10pt}
+{\small Meshtastic Gateway project \quad$\cdot$\quad User guide, version 1.5 \quad$\cdot$\quad 16 November 2026}\par\vspace{10pt}
 {\LARGE\bfseries Meshtastic Gateway}\par\vspace{5pt}
 {\large\bfseries How to read and use the web page:\\ nodes, messages, the map, services and the gateway itself}\par\vspace{8pt}
 {\normalsize Otso Laakso (OH2GAX)}\par
@@ -239,14 +239,15 @@ The Chat page shows the direct messages exchanged with one node as a conversatio
 \end{itemize}
 
 \section{Broadcast}\label{sec:broadcast}
-\fig{broadcast.jpg}{1.0}{The primary channel. Messages from other nodes are on the left with their hops and signal, the gateway's own on the right.}
+\fig{broadcast.jpg}{1.0}{All channels: every message carries a tag with its channel. Messages from other nodes are on the left with their hops and signal, the gateway's own on the right.}
 
-The Broadcast page is the public side: the messages sent to everybody on one channel.
+The Broadcast page is the public side: the messages sent to everybody on the channels.
 \begin{itemize}[leftmargin=1.2em]
-\item The \ui{Channel} list shows the channels configured in the radio, by slot number and name (\ui{0 $\cdot$ Primary}, \ui{1 $\cdot$ OH2GAX}). Disabled slots are not listed.
+\item The page opens with \ui{All channels}: the messages of every channel together, each with a coloured \textbf{channel tag} (\ui{0 $\cdot$ Primary}, \ui{1 $\cdot$ OH2GAX}) so you can see where it was sent.
+\item The \ui{Channel} list chooses one channel instead; then only its messages are shown and the tags are left out. It lists the channels configured in the radio, by slot number and name; disabled slots are not listed.
 \item Each received message shows its sender, the time, how many \textbf{hops} it travelled and the RSSI and SNR of its last hop, as in the Inbox.
 \item \ui{50 / 100 / 500} sets how many messages are shown.
-\item The box at the bottom sends a broadcast \textbf{on the channel that is selected}. While it waits in the outbox it is listed in a yellow \ui{Queued} box above the messages.
+\item The box at the bottom sends a broadcast \textbf{on the channel that is selected}. In the \ui{All channels} view a list next to the box chooses the channel to send on (the primary channel to begin with). While the message waits in the outbox it is listed in a yellow \ui{Queued} box above the messages.
 \item Opening this page clears the red mark of \ui{Broadcast} in the top bar.
 \end{itemize}
 
@@ -450,7 +451,7 @@ see where they are & \ui{Map}; click a node in the list to zoom; tick \ui{track}
 see the path to a node & the green route button in \ui{Active Nodes} (\ui{$\blacktriangledown$} for the hop limit), then \ui{Show on map} \\
 read new messages & the red envelope badge or \ui{Inbox}; a whole conversation: \ui{Chat} \\
 answer a message & \ui{Reply} in the Inbox, or write in the \ui{Chat} \\
-write to everybody & \ui{Broadcast}: choose the channel, write at the bottom \\
+write to everybody & \ui{Broadcast}: choose the channel (in \ui{All channels} next to the box), write at the bottom \\
 know if a DM arrived & \ui{Outbox} or \ui{Chat}: \ackY{} delivered, \ackS{} sent without confirmation, \dots\ waiting \\
 get the weather over the mesh & DM \cmd{wx EFHK} or \cmd{taf EFHK} to the gateway node \\
 check HF conditions & DM \cmd{cmd solar} (space weather) or \cmd{cmd wspr} (20\,m WSPR propagation) \\
